@@ -35,6 +35,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("--shadow-universe-mode", workflow)
         self.assertIn("https://api.github.com/repos/{repository}", workflow)
         self.assertIn('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}', workflow)
+        self.assertNotIn("GITHUB_OUTPUT: ${{ github.output }}", workflow)
         self.assertIn("issue_number=", workflow)
         self.assertIn("SELFHOSTED_CODEX_REVIEW_REPOSITORY", workflow)
         self.assertIn("QuantStrategyLab/CryptoCodexAuditBridge", workflow)

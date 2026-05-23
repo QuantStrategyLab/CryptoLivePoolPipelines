@@ -106,7 +106,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_OUTPUT: ${{ github.output }}
         run: |
           set -euo pipefail
           python - <<'PY'
