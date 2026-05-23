@@ -76,7 +76,11 @@ Boundary rules:
 
 ## Monthly Codex Remediation
 
-The monthly optimization planner may create repo-scoped follow-up issues after AI review. For `CryptoSnapshotPipelines`, low-risk non-experiment tasks marked `[auto-pr-safe]` are queued to the self-hosted VPS ccbot/Codex runner with the `codex-bridge` label. GitHub-hosted Claude Action remains only a manual-dispatch fallback; normal automated code remediation should run through ccbot/Codex.
+The monthly publish workflow creates a `monthly-review` issue, then dispatches `CryptoCodexAuditBridge` as the primary automated review and remediation path. Codex posts its audit result back to the issue and may open a focused PR directly for low-risk reporting, validation, workflow, test, or documentation fixes.
+
+The legacy Claude/OpenAI dual review workflow remains only as a compatibility fallback. Enable it with `LEGACY_AI_REVIEW_ENABLED=true` and configure both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. If Codex dispatch fails and the legacy API fallback is disabled or missing credentials, the monthly publish workflow fails loudly.
+
+The monthly optimization planner may still create repo-scoped follow-up issues after AI review. For `CryptoSnapshotPipelines`, low-risk non-experiment tasks marked `[auto-pr-safe]` are queued to the self-hosted VPS ccbot/Codex runner with the `codex-bridge` label. GitHub-hosted Claude Action remains only a manual-dispatch fallback; normal automated code remediation should run through ccbot/Codex.
 
 Codex remediation PRs must use branch `codex/monthly-optimization-issue-<issue-number>`, include `<!-- auto-optimization-pr:issue-<issue-number> -->` in the PR body, and start as draft. The auto-merge workflow only merges after CI passes, the PR is ready for review, `auto-merge-ok` is present, task-level auto-merge eligibility is recorded, and changed files stay outside guarded selector/config paths.
 

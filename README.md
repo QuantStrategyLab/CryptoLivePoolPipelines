@@ -533,7 +533,9 @@ Behavior:
 
 ## Automated AI Monthly Review
 
-After the monthly report bundle is assembled, the workflow automatically creates a GitHub Issue containing the full `ai_review_input.md` content. A separate workflow (`ai_review.yml`) listens for issues labeled `monthly-review` and triggers Claude Code Action (Anthropic API, Sonnet model) to analyze the report.
+After the monthly report bundle is assembled, the workflow creates a GitHub Issue containing the full `ai_review_input.md` content. The default automated review route dispatches `QuantStrategyLab/CryptoCodexAuditBridge`, which runs Codex on a self-hosted VPS runner. Codex reads the monthly issue, posts the audit result back to the issue, and opens a PR directly for safe low-risk fixes.
+
+The legacy API-based dual AI review remains available as a compatibility fallback. Set `LEGACY_AI_REVIEW_ENABLED=true` and configure both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` to allow the monthly workflow to dispatch `ai_review.yml` if the Codex bridge dispatch fails. When Codex dispatch fails and the legacy API fallback is not enabled or not configured, the monthly publish workflow fails loudly instead of silently skipping review.
 
 The AI review covers:
 
@@ -541,23 +543,26 @@ The AI review covers:
 - **Anomaly detection**: flags unexpected warnings, stale artifacts, validation failures, or suspicious ranking scores
 - **Downstream impact**: notes implications for BinancePlatform (the downstream execution engine), including pool changes and degradation risk
 - **Operator action items**: summarizes the checklist and adds any AI-identified follow-up items
-- **Code improvements**: structured review output feeds the monthly optimization planner; concrete low-risk `auto-pr-safe` tasks for `CryptoSnapshotPipelines` are queued to the self-hosted ccbot/Codex runner with `codex-bridge`, while sensitive selector changes remain manual-review work
+- **Code improvements**: Codex can open focused PRs directly for low-risk reporting, validation, workflow, test, or documentation defects; sensitive selector changes remain manual-review work
 
-All analysis is posted in both English and Chinese.
+Review output is posted back to the monthly issue. The legacy API workflow still renders bilingual output when enabled.
 
-### Required GitHub Secret
+### Optional Legacy API Fallback Secrets
 
 - `ANTHROPIC_API_KEY`: Anthropic API key for Claude Code Action
 - `OPENAI_API_KEY`: OpenAI API key for the secondary monthly review
 
+The default production configuration does not need these API secrets because it uses `CryptoCodexAuditBridge`. Configure them only if you want the legacy dual AI fallback.
+
 Setup:
 
 ```bash
+gh variable set LEGACY_AI_REVIEW_ENABLED --body true
 gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
 gh secret set OPENAI_API_KEY --body "sk-..."
 ```
 
-The AI review workflow runs on `ubuntu-latest` (no self-hosted runner required) and costs approximately $0.01-0.05 per monthly run. Code remediation is a separate phase: repo-scoped low-risk tasks are created as GitHub issues, and safe `CryptoSnapshotPipelines` tasks are handed to the VPS ccbot/Codex bridge instead of GitHub-hosted Claude Action.
+The legacy AI review workflow runs on `ubuntu-latest` (no self-hosted runner required) and costs approximately $0.01-0.05 per monthly run. It is retained for open-source compatibility and emergency fallback, not as the normal production path.
 
 ### Codex Remediation and Auto-Merge Gate
 
@@ -1018,7 +1023,7 @@ Practical review file selection:
 
 Automated AI handoff:
 
-The workflow now automatically creates a GitHub Issue with the `monthly-review` label, which triggers Claude Code Action to analyze the report. See the "Automated AI Monthly Review" section for details.
+The workflow automatically creates a GitHub Issue with the `monthly-review` label, then dispatches `CryptoCodexAuditBridge`. If the Codex bridge dispatch fails and `LEGACY_AI_REVIEW_ENABLED=true` with both API secrets configured, the workflow falls back to the legacy dual AI `ai_review.yml`; otherwise it fails loudly. See the "Automated AI Monthly Review" section for details.
 
 Manual AI handoff (fallback):
 
