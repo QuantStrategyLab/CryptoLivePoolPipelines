@@ -55,6 +55,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
 
         self.assertIn("workflow_dispatch:", workflow)
         self.assertIn("issue_number:", workflow)
+        self.assertIn("vars.LEGACY_AI_REVIEW_ENABLED == 'true'", workflow)
         self.assertIn("id-token: write", workflow)
         self.assertIn("Load review issue context", workflow)
         self.assertIn("api.github.com/repos/{repo}/issues/{issue_number}", workflow)
