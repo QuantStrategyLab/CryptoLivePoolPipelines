@@ -27,6 +27,12 @@ jobs:
       FIRESTORE_DOCUMENT: ${{ vars.FIRESTORE_DOCUMENT || 'CRYPTO_LEADER_ROTATION_LIVE_POOL' }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+      SELFHOSTED_CODEX_REVIEW_ENABLED: ${{ vars.SELFHOSTED_CODEX_REVIEW_ENABLED || 'true' }}
+      SELFHOSTED_CODEX_REVIEW_REPOSITORY: ${{ vars.SELFHOSTED_CODEX_REVIEW_REPOSITORY || 'QuantStrategyLab/SelfHostedCodexAuditBridge' }}
+      SELFHOSTED_CODEX_REVIEW_MODE: ${{ vars.SELFHOSTED_CODEX_REVIEW_MODE || 'review_and_fix' }}
+      SELFHOSTED_CODEX_REVIEW_AUTO_MERGE: ${{ vars.SELFHOSTED_CODEX_REVIEW_AUTO_MERGE || 'false' }}
+      LEGACY_AI_REVIEW_ENABLED: ${{ vars.LEGACY_AI_REVIEW_ENABLED || 'false' }}
 
     steps:
       - name: Checkout
@@ -166,8 +172,100 @@ jobs:
               print(f"issue_url={issue['html_url']}", file=output)
           PY
 
-      - name: Trigger AI Monthly Review
-        if: success() && env.PUBLISH_ENABLED != 'false'
+      - name: Detect Self-hosted Review GitHub App Credentials
+        id: codex_review_app_credentials
+        if: success() && env.PUBLISH_ENABLED != 'false' && env.SELFHOSTED_CODEX_REVIEW_ENABLED != 'false'
+        env:
+          APP_ID: ${{ vars.CROSS_REPO_GITHUB_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${APP_ID:-}" ] && [ -n "${APP_PRIVATE_KEY:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub App Token For Self-hosted Review
+        id: codex_review_app_token
+        if: steps.codex_review_app_credentials.outputs.available == 'true'
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.CROSS_REPO_GITHUB_APP_ID }}
+          private-key: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            SelfHostedCodexAuditBridge
+          permission-contents: write
+
+      - name: Trigger Self-hosted Codex Monthly Review
+        if: success() && env.PUBLISH_ENABLED != 'false' && env.SELFHOSTED_CODEX_REVIEW_ENABLED != 'false'
+        env:
+          APP_TOKEN: ${{ steps.codex_review_app_token.outputs.token }}
+          CODEX_AUDIT_DISPATCH_TOKEN: ${{ secrets.CODEX_AUDIT_DISPATCH_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          ISSUE_NUMBER: ${{ steps.review_issue.outputs.issue_number }}
+          ISSUE_URL: ${{ steps.review_issue.outputs.issue_url }}
+          TARGET_REPOSITORY: ${{ env.SELFHOSTED_CODEX_REVIEW_REPOSITORY }}
+          REVIEW_MODE: ${{ env.SELFHOSTED_CODEX_REVIEW_MODE }}
+          AUTO_MERGE: ${{ env.SELFHOSTED_CODEX_REVIEW_AUTO_MERGE }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.request
+
+          token = os.environ.get("APP_TOKEN", "").strip() or os.environ.get("CODEX_AUDIT_DISPATCH_TOKEN", "").strip()
+          if not token:
+              raise RuntimeError(
+                  "Self-hosted Codex review dispatch requires either a GitHub App token "
+                  "or CODEX_AUDIT_DISPATCH_TOKEN"
+              )
+          target_repository = os.environ["TARGET_REPOSITORY"].strip()
+          if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", target_repository):
+              raise RuntimeError(f"Invalid self-hosted review repository: {target_repository!r}")
+          mode = os.environ["REVIEW_MODE"].strip() or "review_and_fix"
+          if mode not in {"review_only", "review_and_fix"}:
+              raise RuntimeError(f"Unsupported self-hosted review mode: {mode}")
+
+          payload = {
+              "event_type": "monthly-review-created",
+              "client_payload": {
+                  "source_repo": os.environ["GITHUB_REPOSITORY"],
+                  "source_ref": os.environ["GITHUB_REF_NAME"],
+                  "issue_number": os.environ["ISSUE_NUMBER"],
+                  "issue_url": os.environ["ISSUE_URL"],
+                  "mode": mode,
+                  "auto_merge": os.environ["AUTO_MERGE"].strip().lower() == "true",
+              },
+          }
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{target_repository}/dispatches",
+              data=json.dumps(payload).encode("utf-8"),
+              method="POST",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "Content-Type": "application/json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+                  "User-Agent": "crypto-leader-rotation-monthly-publish",
+              },
+          )
+          with urllib.request.urlopen(request) as response:
+              if response.status not in (201, 204):
+                  raise RuntimeError(f"Unexpected dispatch status: {response.status}")
+          print(
+              f"Dispatched self-hosted Codex review for issue #{os.environ['ISSUE_NUMBER']} "
+              f"to {target_repository}"
+          )
+          PY
+
+      - name: Trigger Legacy AI Monthly Review
+        if: success() && env.PUBLISH_ENABLED != 'false' && env.LEGACY_AI_REVIEW_ENABLED == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}

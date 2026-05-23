@@ -36,6 +36,18 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("https://api.github.com/repos/{repository}", workflow)
         self.assertIn('GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}', workflow)
         self.assertIn("issue_number=", workflow)
+        self.assertIn("SELFHOSTED_CODEX_REVIEW_REPOSITORY", workflow)
+        self.assertIn("QuantStrategyLab/SelfHostedCodexAuditBridge", workflow)
+        self.assertIn("CROSS_REPO_GITHUB_APP_ID", workflow)
+        self.assertIn("CROSS_REPO_GITHUB_APP_PRIVATE_KEY", workflow)
+        self.assertIn("actions/create-github-app-token@v3", workflow)
+        self.assertIn("SelfHostedCodexAuditBridge", workflow)
+        self.assertIn("permission-contents: write", workflow)
+        self.assertIn("APP_TOKEN", workflow)
+        self.assertIn("CODEX_AUDIT_DISPATCH_TOKEN", workflow)
+        self.assertIn("monthly-review-created", workflow)
+        self.assertIn("/repos/{target_repository}/dispatches", workflow)
+        self.assertIn("LEGACY_AI_REVIEW_ENABLED == 'true'", workflow)
         self.assertIn("/actions/workflows/ai_review.yml/dispatches", workflow)
 
     def test_ai_review_workflow_supports_dispatch_and_comment_posting(self) -> None:
