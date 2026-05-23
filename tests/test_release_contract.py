@@ -217,6 +217,37 @@ class ReleaseContractValidationTests(unittest.TestCase):
             validation["errors"],
         )
 
+    def test_validate_release_outputs_rejects_live_pool_order_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.build_outputs(root)
+            output_dir = root / "data" / "output"
+            live_pool_path = output_dir / "live_pool.json"
+            artifact_manifest_path = output_dir / "artifact_manifest.json"
+
+            live_pool = json.loads(live_pool_path.read_text(encoding="utf-8"))
+            live_pool["symbols"] = [
+                "TRXUSDT",
+                "ETHUSDT",
+                "NEARUSDT",
+                "BCHUSDT",
+                "SOLUSDT",
+            ]
+            write_json(live_pool_path, live_pool)
+
+            artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
+            artifact_manifest["symbols"] = live_pool["symbols"]
+            artifact_manifest["artifacts"]["live_pool"]["sha256"] = sha256_file(live_pool_path)
+            write_json(artifact_manifest_path, artifact_manifest)
+
+            validation = validate_release_outputs(root / "data" / "output", require_artifact_manifest=True)
+
+        self.assertFalse(validation["ok"])
+        self.assertIn(
+            "live_pool.json symbols must match selected latest_ranking.csv symbols ordered by current_rank",
+            validation["errors"],
+        )
+
     def test_validate_release_outputs_rejects_stale_outputs_when_required(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

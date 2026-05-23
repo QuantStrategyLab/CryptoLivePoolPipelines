@@ -74,6 +74,21 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _ranking_preview(ranking: pd.DataFrame, size: int) -> pd.DataFrame:
+    preview_size = max(0, int(size))
+    if preview_size == 0:
+        return ranking.head(0)
+
+    if "current_rank" not in ranking.columns:
+        return ranking.head(preview_size)
+
+    ordered = ranking.copy()
+    ordered["_current_rank_numeric"] = pd.to_numeric(ordered["current_rank"], errors="coerce")
+    if ordered["_current_rank_numeric"].notna().any():
+        ordered = ordered.sort_values("_current_rank_numeric", na_position="last", kind="mergesort")
+    return ordered.drop(columns=["_current_rank_numeric"], errors="ignore").head(preview_size)
+
+
 def build_release_status_payload(
     output_dir: Path | str,
     *,
@@ -103,7 +118,7 @@ def build_release_status_payload(
 
     selected_mask = ranking["selected_flag"].map(_coerce_bool) if "selected_flag" in ranking.columns else pd.Series(dtype=bool)
     ranking_preview_rows = []
-    preview = ranking.head(max(0, int(ranking_preview_size)))
+    preview = _ranking_preview(ranking, ranking_preview_size)
     for _, row in preview.iterrows():
         ranking_preview_rows.append(
             {

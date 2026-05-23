@@ -174,6 +174,43 @@ def _coerce_selected_flag(series: pd.Series) -> pd.Series:
     )
 
 
+def _selected_symbols_ordered_by_rank(
+    latest_ranking: pd.DataFrame,
+    selected_mask: pd.Series,
+    errors: list[str],
+) -> list[str]:
+    selected_rows = latest_ranking.loc[selected_mask, ["symbol", "current_rank"]].copy()
+    if selected_rows.empty:
+        return []
+
+    selected_rows["_symbol_normalized"] = selected_rows["symbol"].astype(str).str.strip().str.upper()
+    selected_rows["_current_rank_numeric"] = pd.to_numeric(selected_rows["current_rank"], errors="coerce")
+
+    invalid_rank_symbols = selected_rows.loc[
+        selected_rows["_current_rank_numeric"].isna(),
+        "_symbol_normalized",
+    ].tolist()
+    if invalid_rank_symbols:
+        errors.append(
+            "latest_ranking.csv selected rows must have numeric current_rank values: "
+            + ", ".join(invalid_rank_symbols)
+        )
+        return []
+
+    duplicated_rank_symbols = selected_rows.loc[
+        selected_rows["_current_rank_numeric"].duplicated(keep=False),
+        "_symbol_normalized",
+    ].tolist()
+    if duplicated_rank_symbols:
+        errors.append(
+            "latest_ranking.csv selected current_rank values must be unique: "
+            + ", ".join(duplicated_rank_symbols)
+        )
+
+    ordered = selected_rows.sort_values("_current_rank_numeric", kind="mergesort")
+    return ordered["_symbol_normalized"].tolist()
+
+
 def validate_release_outputs(
     output_dir: Path | str,
     *,
@@ -399,10 +436,17 @@ def validate_release_outputs(
                 errors,
             )
         )
+        selected_symbols_by_rank = _selected_symbols_ordered_by_rank(latest_ranking, selected_mask, errors)
         if live_pool_symbols and not set(live_pool_symbols).issubset(set(ranking_symbols)):
             errors.append("live_pool.json symbols must all be present in latest_ranking.csv")
         if live_pool_symbols and not set(live_pool_symbols).issubset(selected_symbols):
             errors.append("live_pool.json symbols must all be selected in latest_ranking.csv")
+        if live_pool_symbols and selected_symbols_by_rank:
+            expected_live_pool_symbols = selected_symbols_by_rank[: len(live_pool_symbols)]
+            if live_pool_symbols != expected_live_pool_symbols:
+                errors.append(
+                    "live_pool.json symbols must match selected latest_ranking.csv symbols ordered by current_rank"
+                )
 
     if manifest_present:
         manifest_mode = str(manifest.get("mode", "")).strip()
