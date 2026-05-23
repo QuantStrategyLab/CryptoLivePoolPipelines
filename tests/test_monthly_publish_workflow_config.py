@@ -44,10 +44,16 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("CryptoCodexAuditBridge", workflow)
         self.assertIn("permission-contents: write", workflow)
         self.assertIn("APP_TOKEN", workflow)
+        self.assertIn("Trigger Monthly Review Automation", workflow)
         self.assertIn("CODEX_AUDIT_DISPATCH_TOKEN", workflow)
+        self.assertIn("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}", workflow)
+        self.assertIn("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}", workflow)
+        self.assertIn("Codex monthly review dispatch failed", workflow)
+        self.assertIn("legacy API review fallback", workflow)
+        self.assertIn("legacy API fallback is disabled", workflow)
         self.assertIn("monthly-review-created", workflow)
         self.assertIn("/repos/{target_repository}/dispatches", workflow)
-        self.assertIn("LEGACY_AI_REVIEW_ENABLED == 'true'", workflow)
+        self.assertIn("LEGACY_API_REVIEW_ENABLED", workflow)
         self.assertIn("/actions/workflows/ai_review.yml/dispatches", workflow)
 
     def test_ai_review_workflow_supports_dispatch_and_comment_posting(self) -> None:
