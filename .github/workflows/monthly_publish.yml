@@ -29,7 +29,7 @@ jobs:
       GCS_BUCKET: ${{ vars.GCS_BUCKET }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       SELFHOSTED_CODEX_REVIEW_ENABLED: ${{ vars.SELFHOSTED_CODEX_REVIEW_ENABLED || 'true' }}
-      SELFHOSTED_CODEX_REVIEW_REPOSITORY: ${{ vars.SELFHOSTED_CODEX_REVIEW_REPOSITORY || 'QuantStrategyLab/SelfHostedCodexAuditBridge' }}
+      SELFHOSTED_CODEX_REVIEW_REPOSITORY: ${{ vars.SELFHOSTED_CODEX_REVIEW_REPOSITORY || 'QuantStrategyLab/CryptoCodexAuditBridge' }}
       SELFHOSTED_CODEX_REVIEW_MODE: ${{ vars.SELFHOSTED_CODEX_REVIEW_MODE || 'review_and_fix' }}
       SELFHOSTED_CODEX_REVIEW_AUTO_MERGE: ${{ vars.SELFHOSTED_CODEX_REVIEW_AUTO_MERGE || 'false' }}
       LEGACY_AI_REVIEW_ENABLED: ${{ vars.LEGACY_AI_REVIEW_ENABLED || 'false' }}
@@ -196,7 +196,7 @@ jobs:
           private-key: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: |
-            SelfHostedCodexAuditBridge
+            CryptoCodexAuditBridge
           permission-contents: write
 
       - name: Trigger Self-hosted Codex Monthly Review
