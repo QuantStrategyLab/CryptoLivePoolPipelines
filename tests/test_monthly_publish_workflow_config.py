@@ -7,6 +7,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "monthly_publish.yml"
 AI_REVIEW_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "ai_review.yml"
+README_ZH_PATH = PROJECT_ROOT / "README.zh-CN.md"
 
 
 class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
@@ -83,6 +84,17 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v7", workflow)
         self.assertNotIn("allowed_tools:", workflow)
         self.assertNotIn("custom_instructions:", workflow)
+
+    def test_chinese_readme_matches_current_monthly_review_defaults(self) -> None:
+        readme = README_ZH_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("CryptoCodexAuditBridge", readme)
+        self.assertIn("LEGACY_AI_REVIEW_ENABLED=true", readme)
+        self.assertIn("OPENAI_API_KEY", readme)
+        self.assertIn("不需要这些 API secrets", readme)
+        self.assertIn("必须从 GitHub variable 读取", readme)
+        self.assertNotIn("只配置 `ANTHROPIC_API_KEY`", readme)
+        self.assertNotIn("如果这两个旧值还在 secret 里，也会继续兼容", readme)
 
 
 if __name__ == "__main__":
