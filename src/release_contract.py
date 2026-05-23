@@ -436,11 +436,16 @@ def validate_release_outputs(
                 errors,
             )
         )
+        selected_row_count = int(selected_mask.sum())
         selected_symbols_by_rank = _selected_symbols_ordered_by_rank(latest_ranking, selected_mask, errors)
         if live_pool_symbols and not set(live_pool_symbols).issubset(set(ranking_symbols)):
             errors.append("live_pool.json symbols must all be present in latest_ranking.csv")
         if live_pool_symbols and not set(live_pool_symbols).issubset(selected_symbols):
             errors.append("live_pool.json symbols must all be selected in latest_ranking.csv")
+        if live_pool_symbols and selected_row_count != len(live_pool_symbols):
+            errors.append(
+                "latest_ranking.csv selected_flag row count must match live_pool.json symbols length"
+            )
         if live_pool_symbols and selected_symbols_by_rank:
             expected_live_pool_symbols = selected_symbols_by_rank[: len(live_pool_symbols)]
             if live_pool_symbols != expected_live_pool_symbols:

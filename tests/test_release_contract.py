@@ -248,6 +248,41 @@ class ReleaseContractValidationTests(unittest.TestCase):
             validation["errors"],
         )
 
+    def test_validate_release_outputs_rejects_extra_selected_ranking_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.build_outputs(root)
+            output_dir = root / "data" / "output"
+            ranking_path = output_dir / "latest_ranking.csv"
+            artifact_manifest_path = output_dir / "artifact_manifest.json"
+
+            ranking = pd.read_csv(ranking_path)
+            ranking.loc[len(ranking)] = {
+                "as_of_date": "2026-03-13",
+                "symbol": "XRPUSDT",
+                "rule_score": 0.4,
+                "linear_score": 0.3,
+                "ml_score": 0.2,
+                "final_score": 0.4,
+                "regime": "risk_off",
+                "confidence": 0.5,
+                "selected_flag": True,
+                "current_rank": 6,
+            }
+            ranking.to_csv(ranking_path, index=False)
+
+            artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
+            artifact_manifest["artifacts"]["latest_ranking"]["sha256"] = sha256_file(ranking_path)
+            write_json(artifact_manifest_path, artifact_manifest)
+
+            validation = validate_release_outputs(root / "data" / "output", require_artifact_manifest=True)
+
+        self.assertFalse(validation["ok"])
+        self.assertIn(
+            "latest_ranking.csv selected_flag row count must match live_pool.json symbols length",
+            validation["errors"],
+        )
+
     def test_validate_release_outputs_rejects_stale_outputs_when_required(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
