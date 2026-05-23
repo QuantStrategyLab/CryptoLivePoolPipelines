@@ -176,6 +176,31 @@ class ReleaseStatusSummaryTests(unittest.TestCase):
         self.assertEqual(len(payload["artifact_summary"]["ranking_preview"]), 3)
         self.assertTrue(payload["validation"]["ok"])
 
+    def test_build_release_status_payload_orders_preview_by_current_rank(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.write_outputs(Path(tmp_dir))
+            ranking_path = output_dir / "latest_ranking.csv"
+            ranking = pd.read_csv(ranking_path)
+            ranking = ranking.iloc[[2, 0, 1, 3, 4]]
+            ranking.to_csv(ranking_path, index=False)
+            artifact_manifest_path = output_dir / "artifact_manifest.json"
+            artifact_manifest = json.loads(artifact_manifest_path.read_text(encoding="utf-8"))
+            artifact_manifest["artifacts"]["latest_ranking"]["sha256"] = sha256_file(ranking_path)
+            write_json(artifact_manifest_path, artifact_manifest)
+
+            payload = MODULE.build_release_status_payload(
+                output_dir,
+                max_age_days=45,
+                require_freshness=False,
+                ranking_preview_size=3,
+                reference_date="2026-04-01",
+            )
+
+        self.assertEqual(
+            [row["symbol"] for row in payload["artifact_summary"]["ranking_preview"]],
+            ["TRXUSDT", "ETHUSDT", "BCHUSDT"],
+        )
+
     def test_build_release_status_payload_reports_error_when_manifest_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = self.write_outputs(Path(tmp_dir), include_manifest=False)
