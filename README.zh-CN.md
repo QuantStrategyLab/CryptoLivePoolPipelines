@@ -380,7 +380,9 @@ make monthly-review-briefing
 
 ## 自动化 AI 月度审阅
 
-月报 bundle 组装完成后，workflow 会自动创建一个 GitHub Issue，内容为完整的 `ai_review_input.md`。另一个独立的 workflow（`ai_review.yml`）监听带有 `monthly-review` 标签的 Issue，触发 Claude Code Action（Anthropic API，Sonnet 模型）进行分析。
+月报 bundle 组装完成后，workflow 会自动创建一个 GitHub Issue，内容为完整的 `ai_review_input.md`。默认自动审阅路径会 dispatch `QuantStrategyLab/CryptoCodexAuditBridge`，由 self-hosted VPS runner 上已登录的 Codex CLI 读取月报 Issue、回帖审计结果，并在发现安全、低风险的问题时直接创建修复 PR。
+
+旧的 API 双 AI 审阅仍保留为兼容性 fallback。只有在设置 `LEGACY_AI_REVIEW_ENABLED=true`，并同时配置 `ANTHROPIC_API_KEY` 与 `OPENAI_API_KEY` 时，月度 workflow 才会在 Codex bridge dispatch 失败后调用 `ai_review.yml`。如果 Codex dispatch 失败且 legacy API fallback 未启用或缺少凭据，monthly publish workflow 会直接失败，而不是静默跳过审阅。
 
 AI 审阅覆盖范围：
 
@@ -388,27 +390,34 @@ AI 审阅覆盖范围：
 - **异常检测**：标记意外的 warning、过时的产物、验证失败或可疑的排名分数
 - **下游影响**：分析对 BinancePlatform（下游执行引擎）的影响，包括池子变动和降级风险
 - **操作员待办事项**：汇总 checklist 并补充 AI 识别出的跟进事项
-- **代码改进**：如果发现具体、低风险的改进，Claude 可能会自动提 PR（不会自动合并）
+- **代码改进**：Codex 可以为低风险的 reporting、validation、workflow、test 或 documentation 问题直接创建聚焦 PR；涉及 selector、threshold、universe 或交易行为的变更仍需人工决策
 
-所有分析结果同时以英文和中文输出。
+审阅结果会回帖到月度 Issue。legacy API workflow 在启用时仍会渲染中英文输出。
 
-### 需要配置的 GitHub Secret
+### 可选 Legacy API Fallback Secrets
 
-- `ANTHROPIC_API_KEY`：Anthropic API 密钥
+- `ANTHROPIC_API_KEY`：Claude Code Action 使用的 Anthropic API key
+- `OPENAI_API_KEY`：二次月度审阅使用的 OpenAI API key
 
-配置方式：
+默认生产配置不需要这些 API secrets，因为默认使用 `CryptoCodexAuditBridge`。只有需要启用 legacy 双 AI fallback 时才配置它们。
+
+配置方式示例：
 
 ```bash
+gh variable set LEGACY_AI_REVIEW_ENABLED --body true
 gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
+gh secret set OPENAI_API_KEY --body "sk-..."
 ```
+
+legacy AI review workflow 运行在 `ubuntu-latest`（不需要 self-hosted runner），每月运行一次费用约 $0.01-0.05。它保留用于开源兼容和应急 fallback，不是当前默认生产路径。
 
 ### Monthly Publish 的 GitHub 配置
 
 `monthly_publish.yml` 现在这样读取配置：
 
 - `GCP_SERVICE_ACCOUNT_KEY` 继续放在 GitHub secret
-- `GCP_PROJECT_ID`、`GCS_BUCKET` 优先从 GitHub variable 读取
-- 如果这两个旧值还在 secret 里，也会继续兼容
+- `GCP_PROJECT_ID`、`GCS_BUCKET` 等非密发布目标必须从 GitHub variable 读取
+- workflow 不再从 `secrets.GCP_PROJECT_ID` 或 `secrets.GCS_BUCKET` 读取旧 fallback
 
 推荐配置：
 
