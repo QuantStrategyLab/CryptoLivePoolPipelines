@@ -35,12 +35,18 @@ class MonthlyReportBundleTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        (output_dir / "release_status_summary.md").write_text("# Release Status Summary\n", encoding="utf-8")
+        (output_dir / "release_status_summary.md").write_text(
+            "# Release Status Summary\n\nGenerated: fixture\n",
+            encoding="utf-8",
+        )
         (output_dir / "monthly_review.json").write_text(
             json.dumps({"as_of_date": "2026-03-13", "warnings": [], "status": "ok"}),
             encoding="utf-8",
         )
-        (output_dir / "monthly_review.md").write_text("# Monthly Review\n", encoding="utf-8")
+        (output_dir / "monthly_review.md").write_text(
+            "# Monthly Review\n\n## Current release status\n",
+            encoding="utf-8",
+        )
         (output_dir / "monthly_review_prompt.md").write_text("Monthly release review prompt\n", encoding="utf-8")
         (output_dir / "monthly_telegram.txt").write_text("CryptoSnapshotPipelines monthly release\n", encoding="utf-8")
         return output_dir
@@ -61,6 +67,10 @@ class MonthlyReportBundleTests(unittest.TestCase):
             self.assertIn("upstream selector review", ai_review_input)
             self.assertIn("Shadow / challenger coverage", ai_review_input)
             self.assertIn("Strategy review questions", ai_review_input)
+            self.assertIn("## Release Status Summary\n\nGenerated: fixture", ai_review_input)
+            self.assertIn("## Monthly Review\n\n## Current release status", ai_review_input)
+            self.assertNotIn("## Release Status Summary\n\n# Release Status Summary", ai_review_input)
+            self.assertNotIn("## Monthly Review\n\n# Monthly Review", ai_review_input)
 
 
 if __name__ == "__main__":

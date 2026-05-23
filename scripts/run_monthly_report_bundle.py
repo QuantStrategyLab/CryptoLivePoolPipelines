@@ -113,7 +113,19 @@ def render_job_summary(bundle: dict[str, Any], release_status: dict[str, Any], m
 """
 
 
+def strip_wrapped_h1(markdown: str, heading: str) -> str:
+    text = markdown.strip()
+    first_line, separator, rest = text.partition("\n")
+    if separator and first_line.strip() == f"# {heading}":
+        return rest.lstrip("\n")
+    if not separator and first_line.strip() == f"# {heading}":
+        return ""
+    return text
+
+
 def render_ai_review_input(bundle: dict[str, Any], release_status_md: str, monthly_review_md: str, telegram_text: str) -> str:
+    release_status_body = strip_wrapped_h1(release_status_md, "Release Status Summary")
+    monthly_review_body = strip_wrapped_h1(monthly_review_md, "Monthly Review")
     return f"""# Monthly Report Review Input
 
 Use this file as the primary review input for the monthly upstream release package.
@@ -143,11 +155,11 @@ Use this file as the primary review input for the monthly upstream release packa
 
 ## Release Status Summary
 
-{release_status_md}
+{release_status_body}
 
 ## Monthly Review
 
-{monthly_review_md}
+{monthly_review_body}
 
 ## Telegram Preview
 
