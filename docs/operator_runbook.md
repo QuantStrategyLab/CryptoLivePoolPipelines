@@ -76,9 +76,9 @@ Boundary rules:
 
 ## Monthly Codex Remediation
 
-The monthly publish workflow creates a `monthly-review` issue, then dispatches `CryptoCodexAuditBridge` as the primary automated review and remediation path. Codex posts its audit result back to the issue and may open a focused PR directly for low-risk reporting, validation, workflow, test, or documentation fixes.
+The monthly publish workflow creates a `monthly-review` issue, then dispatches `CryptoCodexAuditBridge` as the automated review and remediation path. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`: `codex` runs self-hosted Codex and may open focused PRs, `openai` posts an API review comment only, and `auto` falls back to OpenAI review when Codex fails and the bridge has `OPENAI_API_KEY`.
 
-The legacy Claude/OpenAI dual review workflow remains only as a compatibility fallback. Enable it with `LEGACY_AI_REVIEW_ENABLED=true` and configure both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. If Codex dispatch fails and the legacy API fallback is disabled or missing credentials, the monthly publish workflow fails loudly.
+If the bridge dispatch fails, the monthly publish workflow fails loudly. The older source-local `ai_review.yml` workflow remains only as a manual compatibility path.
 
 The monthly optimization planner may still create repo-scoped follow-up issues after AI review. For `CryptoSnapshotPipelines`, low-risk non-experiment tasks marked `[auto-pr-safe]` are queued to the self-hosted VPS ccbot/Codex runner with the `codex-bridge` label. GitHub-hosted Claude Action remains only a manual-dispatch fallback; normal automated code remediation should run through ccbot/Codex.
 

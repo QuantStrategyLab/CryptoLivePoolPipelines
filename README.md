@@ -533,9 +533,13 @@ Behavior:
 
 ## Automated AI Monthly Review
 
-After the monthly report bundle is assembled, the workflow creates a GitHub Issue containing the full `ai_review_input.md` content. The default automated review route dispatches `QuantStrategyLab/CryptoCodexAuditBridge`, which runs Codex on a self-hosted VPS runner. Codex reads the monthly issue, posts the audit result back to the issue, and opens a PR directly for safe low-risk fixes.
+After the monthly report bundle is assembled, the workflow creates a GitHub Issue containing the full `ai_review_input.md` content. The automated review route dispatches `QuantStrategyLab/CryptoCodexAuditBridge`. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`:
 
-The legacy API-based dual AI review remains available as a compatibility fallback. Set `LEGACY_AI_REVIEW_ENABLED=true` and configure both `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` to allow the monthly workflow to dispatch `ai_review.yml` if the Codex bridge dispatch fails. When Codex dispatch fails and the legacy API fallback is not enabled or not configured, the monthly publish workflow fails loudly instead of silently skipping review.
+- `codex` (default): run Codex on the self-hosted VPS runner, post the audit result, and open a PR directly for safe low-risk fixes.
+- `openai`: run an API review inside the bridge and post a review comment only.
+- `auto`: try Codex first; if Codex fails and the bridge has `OPENAI_API_KEY`, post the API review fallback from the bridge.
+
+If the bridge dispatch itself fails, the monthly publish workflow fails loudly instead of silently skipping review.
 
 The AI review covers:
 
@@ -545,24 +549,24 @@ The AI review covers:
 - **Operator action items**: summarizes the checklist and adds any AI-identified follow-up items
 - **Code improvements**: Codex can open focused PRs directly for low-risk reporting, validation, workflow, test, or documentation defects; sensitive selector changes remain manual-review work
 
-Review output is posted back to the monthly issue. The legacy API workflow still renders bilingual output when enabled.
+Review output is posted back to the monthly issue.
 
-### Optional Legacy API Fallback Secrets
+### Optional Bridge API Fallback
 
-- `ANTHROPIC_API_KEY`: Anthropic API key for Claude Code Action
-- `OPENAI_API_KEY`: OpenAI API key for the secondary monthly review
+- `SELFHOSTED_CODEX_REVIEW_PROVIDER`: set to `openai` or `auto` in this source repository.
+- `OPENAI_API_KEY`: configure in `CryptoCodexAuditBridge`, not this source repository.
+- `OPENAI_MODEL`: optional bridge repository variable, default `gpt-5.4-mini`.
 
-The default production configuration does not need these API secrets because it uses `CryptoCodexAuditBridge`. Configure them only if you want the legacy dual AI fallback.
+The default production configuration does not need model API secrets because it uses Codex through `CryptoCodexAuditBridge`.
 
 Setup:
 
 ```bash
-gh variable set LEGACY_AI_REVIEW_ENABLED --body true
-gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
-gh secret set OPENAI_API_KEY --body "sk-..."
+gh variable set SELFHOSTED_CODEX_REVIEW_PROVIDER --body auto
+gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-..."
 ```
 
-The legacy AI review workflow runs on `ubuntu-latest` (no self-hosted runner required) and costs approximately $0.01-0.05 per monthly run. It is retained for open-source compatibility and emergency fallback, not as the normal production path.
+The older `ai_review.yml` workflow is retained only as a manual compatibility path; normal automated AI review should be dispatched to `CryptoCodexAuditBridge`.
 
 ### Codex Remediation and Auto-Merge Gate
 
@@ -1023,7 +1027,7 @@ Practical review file selection:
 
 Automated AI handoff:
 
-The workflow automatically creates a GitHub Issue with the `monthly-review` label, then dispatches `CryptoCodexAuditBridge`. If the Codex bridge dispatch fails and `LEGACY_AI_REVIEW_ENABLED=true` with both API secrets configured, the workflow falls back to the legacy dual AI `ai_review.yml`; otherwise it fails loudly. See the "Automated AI Monthly Review" section for details.
+The workflow automatically creates a GitHub Issue with the `monthly-review` label, then dispatches `CryptoCodexAuditBridge`. Provider fallback is handled inside the bridge through `SELFHOSTED_CODEX_REVIEW_PROVIDER`; if the bridge dispatch fails, the workflow fails loudly. See the "Automated AI Monthly Review" section for details.
 
 Manual AI handoff (fallback):
 
