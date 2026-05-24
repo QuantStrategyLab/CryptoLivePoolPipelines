@@ -76,7 +76,7 @@ Boundary rules:
 
 ## Monthly Codex Remediation
 
-The monthly publish workflow creates a `monthly-review` issue, then dispatches `CryptoCodexAuditBridge` as the automated review and remediation path. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`: `auto` is the default and runs the self-hosted Codex path first, falls back to OpenAI review when Codex setup or execution fails and the bridge has `OPENAI_API_KEY`, and fails loudly when the API fallback is not configured. `codex` disables API fallback; `openai` posts an API review comment only.
+The monthly publish workflow creates a `monthly-review` issue, then dispatches `CryptoCodexAuditBridge` as the automated review and remediation path. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`: `auto` is the default and runs the self-hosted Codex path first, falls back to the configured API reviewers when Codex setup or execution fails, and fails loudly when no API fallback key is configured. `codex` disables API fallback; `api` posts a combined API review; `openai` and `anthropic` post a single-provider API review only.
 
 If the bridge dispatch fails, the monthly publish workflow fails loudly. Source-local legacy AI review workflows are intentionally removed; provider fallback lives in `CryptoCodexAuditBridge`.
 
