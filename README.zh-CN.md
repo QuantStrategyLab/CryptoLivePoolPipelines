@@ -380,9 +380,13 @@ make monthly-review-briefing
 
 ## 自动化 AI 月度审阅
 
-月报 bundle 组装完成后，workflow 会自动创建一个 GitHub Issue，内容为完整的 `ai_review_input.md`。默认自动审阅路径会 dispatch `QuantStrategyLab/CryptoCodexAuditBridge`，由 self-hosted VPS runner 上已登录的 Codex CLI 读取月报 Issue、回帖审计结果，并在发现安全、低风险的问题时直接创建修复 PR。
+月报 bundle 组装完成后，workflow 会自动创建一个 GitHub Issue，内容为完整的 `ai_review_input.md`。自动审阅路径会 dispatch `QuantStrategyLab/CryptoCodexAuditBridge`，由 bridge 统一决定 provider：
 
-旧的 API 双 AI 审阅仍保留为兼容性 fallback。只有在设置 `LEGACY_AI_REVIEW_ENABLED=true`，并同时配置 `ANTHROPIC_API_KEY` 与 `OPENAI_API_KEY` 时，月度 workflow 才会在 Codex bridge dispatch 失败后调用 `ai_review.yml`。如果 Codex dispatch 失败且 legacy API fallback 未启用或缺少凭据，monthly publish workflow 会直接失败，而不是静默跳过审阅。
+- `codex`（默认）：由 self-hosted VPS runner 上已登录的 Codex CLI 读取月报 Issue、回帖审计结果，并在发现安全、低风险的问题时直接创建修复 PR。
+- `openai`：在 bridge 内运行 API 审阅，只回帖，不改代码。
+- `auto`：先跑 Codex；如果 Codex 失败且 bridge 配置了 `OPENAI_API_KEY`，由 bridge 回落到 OpenAI API 审阅。
+
+如果 bridge dispatch 本身失败，monthly publish workflow 会直接失败，而不是静默跳过审阅。
 
 AI 审阅覆盖范围：
 
@@ -392,24 +396,24 @@ AI 审阅覆盖范围：
 - **操作员待办事项**：汇总 checklist 并补充 AI 识别出的跟进事项
 - **代码改进**：Codex 可以为低风险的 reporting、validation、workflow、test 或 documentation 问题直接创建聚焦 PR；涉及 selector、threshold、universe 或交易行为的变更仍需人工决策
 
-审阅结果会回帖到月度 Issue。legacy API workflow 在启用时仍会渲染中英文输出。
+审阅结果会回帖到月度 Issue。
 
-### 可选 Legacy API Fallback Secrets
+### 可选 Bridge API Fallback
 
-- `ANTHROPIC_API_KEY`：Claude Code Action 使用的 Anthropic API key
-- `OPENAI_API_KEY`：二次月度审阅使用的 OpenAI API key
+- `SELFHOSTED_CODEX_REVIEW_PROVIDER`：在当前 source repo 设置为 `openai` 或 `auto`。
+- `OPENAI_API_KEY`：配置在 `CryptoCodexAuditBridge`，不要配置在当前 source repo。
+- `OPENAI_MODEL`：可选 bridge repo variable，默认 `gpt-5.4-mini`。
 
-默认生产配置不需要这些 API secrets，因为默认使用 `CryptoCodexAuditBridge`。只有需要启用 legacy 双 AI fallback 时才配置它们。
+默认生产配置不需要模型 API secrets，因为默认使用 `CryptoCodexAuditBridge` 的 Codex provider。
 
 配置方式示例：
 
 ```bash
-gh variable set LEGACY_AI_REVIEW_ENABLED --body true
-gh secret set ANTHROPIC_API_KEY --body "sk-ant-..."
-gh secret set OPENAI_API_KEY --body "sk-..."
+gh variable set SELFHOSTED_CODEX_REVIEW_PROVIDER --body auto
+gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-..."
 ```
 
-legacy AI review workflow 运行在 `ubuntu-latest`（不需要 self-hosted runner），每月运行一次费用约 $0.01-0.05。它保留用于开源兼容和应急 fallback，不是当前默认生产路径。
+旧 `ai_review.yml` workflow 只保留为手动兼容路径；正常自动 AI 审阅统一 dispatch 到 `CryptoCodexAuditBridge`。
 
 ### Monthly Publish 的 GitHub 配置
 
