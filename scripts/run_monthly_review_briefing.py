@@ -52,9 +52,7 @@ def load_track_summary(path: Path) -> list[dict[str, str]]:
 def load_optional_track_summary(path: Path) -> list[dict[str, str]]:
     if not path.exists():
         return []
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        return list(reader)
+    return load_track_summary(path)
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
