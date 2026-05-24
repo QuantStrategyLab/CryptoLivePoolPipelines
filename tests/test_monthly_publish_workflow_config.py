@@ -49,6 +49,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("Trigger Monthly Review Automation", workflow)
         self.assertIn("CODEX_AUDIT_DISPATCH_TOKEN", workflow)
         self.assertIn("SELFHOSTED_CODEX_REVIEW_PROVIDER", workflow)
+        self.assertIn("SELFHOSTED_CODEX_REVIEW_PROVIDER || 'auto'", workflow)
         self.assertIn("REVIEW_PROVIDER", workflow)
         self.assertIn('"provider": provider', workflow)
         self.assertNotIn("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}", workflow)

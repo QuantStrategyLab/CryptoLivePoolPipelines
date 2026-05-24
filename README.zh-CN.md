@@ -382,9 +382,9 @@ make monthly-review-briefing
 
 月报 bundle 组装完成后，workflow 会自动创建一个 GitHub Issue，内容为完整的 `ai_review_input.md`。自动审阅路径会 dispatch `QuantStrategyLab/CryptoCodexAuditBridge`，由 bridge 统一决定 provider：
 
-- `codex`（默认）：由 self-hosted VPS runner 上已登录的 Codex CLI 读取月报 Issue、回帖审计结果，并在发现安全、低风险的问题时直接创建修复 PR。
+- `auto`（默认）：先跑 Codex；如果 Codex 失败且 bridge 配置了 `OPENAI_API_KEY`，由 bridge 回落到 OpenAI API 审阅；如果 API fallback 没配置则明确失败。
+- `codex`：只跑 Codex，不使用 API fallback。
 - `openai`：在 bridge 内运行 API 审阅，只回帖，不改代码。
-- `auto`：先跑 Codex；如果 Codex 失败且 bridge 配置了 `OPENAI_API_KEY`，由 bridge 回落到 OpenAI API 审阅。
 
 如果 bridge dispatch 本身失败，monthly publish workflow 会直接失败，而不是静默跳过审阅。
 
@@ -400,7 +400,7 @@ AI 审阅覆盖范围：
 
 ### 可选 Bridge API Fallback
 
-- `SELFHOSTED_CODEX_REVIEW_PROVIDER`：在当前 source repo 设置为 `openai` 或 `auto`。
+- `SELFHOSTED_CODEX_REVIEW_PROVIDER`：默认 `auto`；设置为 `codex` 可关闭 API fallback，设置为 `openai` 可只跑 API 审阅。
 - `OPENAI_API_KEY`：配置在 `CryptoCodexAuditBridge`，不要配置在当前 source repo。
 - `OPENAI_MODEL`：可选 bridge repo variable，默认 `gpt-5.4-mini`。
 

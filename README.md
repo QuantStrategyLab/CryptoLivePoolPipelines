@@ -535,9 +535,9 @@ Behavior:
 
 After the monthly report bundle is assembled, the workflow creates a GitHub Issue containing the full `ai_review_input.md` content. The automated review route dispatches `QuantStrategyLab/CryptoCodexAuditBridge`. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`:
 
-- `codex` (default): run Codex on the self-hosted VPS runner, post the audit result, and open a PR directly for safe low-risk fixes.
+- `auto` (default): run Codex first; if Codex fails and the bridge has `OPENAI_API_KEY`, post the API review fallback from the bridge. If the API fallback is not configured, fail loudly.
+- `codex`: run Codex on the self-hosted VPS runner, post the audit result, and open a PR directly for safe low-risk fixes without API fallback.
 - `openai`: run an API review inside the bridge and post a review comment only.
-- `auto`: try Codex first; if Codex fails and the bridge has `OPENAI_API_KEY`, post the API review fallback from the bridge.
 
 If the bridge dispatch itself fails, the monthly publish workflow fails loudly instead of silently skipping review.
 
@@ -553,7 +553,7 @@ Review output is posted back to the monthly issue.
 
 ### Optional Bridge API Fallback
 
-- `SELFHOSTED_CODEX_REVIEW_PROVIDER`: set to `openai` or `auto` in this source repository.
+- `SELFHOSTED_CODEX_REVIEW_PROVIDER`: defaults to `auto`; set to `codex` to disable API fallback or `openai` for API-only review.
 - `OPENAI_API_KEY`: configure in `CryptoCodexAuditBridge`, not this source repository.
 - `OPENAI_MODEL`: optional bridge repository variable, default `gpt-5.4-mini`.
 
