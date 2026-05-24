@@ -65,6 +65,10 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
 
         self.assertFalse((workflow_dir / "ai_review.yml").exists())
         self.assertFalse((workflow_dir / "auto_optimization_pr.yml").exists())
+        self.assertFalse((workflow_dir / "monthly_optimization_planner.yml").exists())
+        self.assertFalse((workflow_dir / "experiment_validation.yml").exists())
+        self.assertFalse((workflow_dir / "auto_merge_optimization_pr.yml").exists())
+        self.assertFalse((workflow_dir / "codex_pr_feedback.yml").exists())
 
     def test_chinese_readme_matches_current_monthly_review_defaults(self) -> None:
         readme = README_ZH_PATH.read_text(encoding="utf-8")

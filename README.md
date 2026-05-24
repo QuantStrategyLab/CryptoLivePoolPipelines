@@ -567,18 +567,6 @@ gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --bo
 
 Source-local legacy AI review workflows are intentionally not kept in this repository. Provider fallback lives in `CryptoCodexAuditBridge`, so this source repository does not need Anthropic/OpenAI secrets.
 
-### Codex Remediation and Auto-Merge Gate
-
-The monthly optimization planner creates repo-scoped issues only for this snapshot repository. Low-risk non-experiment tasks marked `[auto-pr-safe]` are labeled with:
-
-- `monthly-optimization-task`
-- `codex-bridge`
-- `auto-merge-ok`
-
-The `codex-bridge` label is consumed by the self-hosted VPS ccbot/Codex runner. Codex should open a draft PR from `codex/monthly-optimization-issue-<issue-number>`, include `<!-- auto-optimization-pr:issue-<issue-number> -->` in the PR body, and mark the PR ready only after targeted tests pass. The post-CI `auto_merge_optimization_pr.yml` workflow can merge Codex PRs only when the PR is non-draft, carries `auto-merge-ok`, has the expected marker, reports task-level auto-merge eligibility, and touches no guarded selector/config paths.
-
-If a Codex remediation PR fails CI or receives a changes-requested review, `codex_pr_feedback.yml` comments the failure or review summary back to the source `codex-bridge` issue. Because the VPS bridge re-dispatches updated issues, Codex can fix the same PR branch without manual handoff. The workflow allows up to three automatic feedback rounds; after that it removes `codex-bridge` so the issue waits for human review.
-
 ## Dynamic Universe Logic
 
 The universe is a hard filter layer, not the final holdings set.
