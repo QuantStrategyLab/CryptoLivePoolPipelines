@@ -123,6 +123,18 @@ class MonthlyReviewBriefingTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "monthly shadow build outputs are required"):
                 MODULE.require_shadow_outputs(inputs)
 
+    def test_build_review_inputs_rejects_empty_track_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.write_fixture_files(Path(tmp_dir))
+            track_summary = output_dir / "shadow_candidate_tracks" / "track_summary.csv"
+            track_summary.write_text(
+                "track_id,profile_name,target_mode,source_track,candidate_status,release_count,first_as_of_date,last_as_of_date,release_index_path\n",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "CSV is empty"):
+                MODULE.build_review_inputs(output_dir)
+
 
 if __name__ == "__main__":
     unittest.main()
