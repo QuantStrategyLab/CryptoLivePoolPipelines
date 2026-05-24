@@ -116,7 +116,6 @@ CryptoSnapshotPipelines/
   .github/
     workflows/
       monthly_publish.yml
-      ai_review.yml
   README.md
   requirements.txt
   .gitignore
@@ -566,11 +565,11 @@ gh variable set SELFHOSTED_CODEX_REVIEW_PROVIDER --body auto
 gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-..."
 ```
 
-The older `ai_review.yml` workflow is retained only as a manual compatibility path; normal automated AI review should be dispatched to `CryptoCodexAuditBridge`.
+Source-local legacy AI review workflows are intentionally not kept in this repository. Provider fallback lives in `CryptoCodexAuditBridge`, so this source repository does not need Anthropic/OpenAI secrets.
 
 ### Codex Remediation and Auto-Merge Gate
 
-The monthly optimization planner creates repo-scoped issues for follow-up tasks. For this repository, low-risk non-experiment tasks marked `[auto-pr-safe]` are labeled with:
+The monthly optimization planner creates repo-scoped issues only for this snapshot repository. Low-risk non-experiment tasks marked `[auto-pr-safe]` are labeled with:
 
 - `monthly-optimization-task`
 - `codex-bridge`

@@ -78,9 +78,9 @@ Boundary rules:
 
 The monthly publish workflow creates a `monthly-review` issue, then dispatches `CryptoCodexAuditBridge` as the automated review and remediation path. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`: `auto` is the default and runs the self-hosted Codex path first, falls back to OpenAI review when Codex setup or execution fails and the bridge has `OPENAI_API_KEY`, and fails loudly when the API fallback is not configured. `codex` disables API fallback; `openai` posts an API review comment only.
 
-If the bridge dispatch fails, the monthly publish workflow fails loudly. The older source-local `ai_review.yml` workflow remains only as a manual compatibility path.
+If the bridge dispatch fails, the monthly publish workflow fails loudly. Source-local legacy AI review workflows are intentionally removed; provider fallback lives in `CryptoCodexAuditBridge`.
 
-The monthly optimization planner may still create repo-scoped follow-up issues after AI review. For `CryptoSnapshotPipelines`, low-risk non-experiment tasks marked `[auto-pr-safe]` are queued to the self-hosted VPS ccbot/Codex runner with the `codex-bridge` label. GitHub-hosted Claude Action remains only a manual-dispatch fallback; normal automated code remediation should run through ccbot/Codex.
+The monthly optimization planner may still create repo-scoped follow-up issues after AI review, but only for `CryptoSnapshotPipelines`. Low-risk non-experiment tasks marked `[auto-pr-safe]` are queued to the self-hosted VPS ccbot/Codex runner with the `codex-bridge` label.
 
 Codex remediation PRs must use branch `codex/monthly-optimization-issue-<issue-number>`, include `<!-- auto-optimization-pr:issue-<issue-number> -->` in the PR body, and start as draft. The auto-merge workflow only merges after CI passes, the PR is ready for review, `auto-merge-ok` is present, task-level auto-merge eligibility is recorded, and changed files stay outside guarded selector/config paths.
 

@@ -92,7 +92,6 @@ CryptoSnapshotPipelines/
   .github/
     workflows/
       monthly_publish.yml
-      ai_review.yml
   README.md
   README.zh-CN.md
   requirements.txt
@@ -413,7 +412,7 @@ gh variable set SELFHOSTED_CODEX_REVIEW_PROVIDER --body auto
 gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-..."
 ```
 
-旧 `ai_review.yml` workflow 只保留为手动兼容路径；正常自动 AI 审阅统一 dispatch 到 `CryptoCodexAuditBridge`。
+本仓库不再保留 source-local `ai_review.yml` 或 Claude 自动优化 workflow。provider fallback 统一放在 `CryptoCodexAuditBridge`，因此当前 source repo 不需要配置 Anthropic/OpenAI secrets。
 
 ### Monthly Publish 的 GitHub 配置
 

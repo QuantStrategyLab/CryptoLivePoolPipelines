@@ -6,7 +6,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "monthly_publish.yml"
-AI_REVIEW_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "ai_review.yml"
 README_ZH_PATH = PROJECT_ROOT / "README.zh-CN.md"
 
 
@@ -61,32 +60,11 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertNotIn("LEGACY_API_REVIEW_ENABLED", workflow)
         self.assertNotIn("/actions/workflows/ai_review.yml/dispatches", workflow)
 
-    def test_ai_review_workflow_supports_dispatch_and_comment_posting(self) -> None:
-        workflow = AI_REVIEW_WORKFLOW_PATH.read_text(encoding="utf-8")
+    def test_source_local_legacy_ai_workflows_are_removed(self) -> None:
+        workflow_dir = PROJECT_ROOT / ".github" / "workflows"
 
-        self.assertIn("workflow_dispatch:", workflow)
-        self.assertIn("issue_number:", workflow)
-        self.assertIn("vars.LEGACY_AI_REVIEW_ENABLED == 'true'", workflow)
-        self.assertIn("id-token: write", workflow)
-        self.assertIn("Load review issue context", workflow)
-        self.assertIn("api.github.com/repos/{repo}/issues/{issue_number}", workflow)
-        self.assertIn("github_token: ${{ secrets.GITHUB_TOKEN }}", workflow)
-        self.assertIn('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"', workflow)
-        self.assertIn("This is a strategy-optimization review, not only a release QA check.", workflow)
-        self.assertIn("If shadow or challenger tracks are missing, say evidence is incomplete", workflow)
-        self.assertIn("Strategy Optimization Directions", workflow)
-        self.assertIn("post_monthly_ai_review_comment.py", workflow)
-        self.assertIn("render_monthly_ai_review.py", workflow)
-        self.assertIn("run_openai_secondary_review.py", workflow)
-        self.assertIn("build_ai_review_payload.py", workflow)
-        self.assertIn("steps.claude_review.outputs.execution_file", workflow)
-        self.assertIn("OPENAI_API_KEY", workflow)
-        self.assertIn("OPENAI_SECONDARY_MODEL", workflow)
-        self.assertIn("secondary_review.json", workflow)
-        self.assertIn("final_review_payload.json", workflow)
-        self.assertIn("actions/upload-artifact@v7", workflow)
-        self.assertNotIn("allowed_tools:", workflow)
-        self.assertNotIn("custom_instructions:", workflow)
+        self.assertFalse((workflow_dir / "ai_review.yml").exists())
+        self.assertFalse((workflow_dir / "auto_optimization_pr.yml").exists())
 
     def test_chinese_readme_matches_current_monthly_review_defaults(self) -> None:
         readme = README_ZH_PATH.read_text(encoding="utf-8")
@@ -96,6 +74,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("OPENAI_API_KEY", readme)
         self.assertIn("配置在 `CryptoCodexAuditBridge`", readme)
         self.assertIn("必须从 GitHub variable 读取", readme)
+        self.assertIn("本仓库不再保留 source-local `ai_review.yml`", readme)
         self.assertNotIn("只配置 `ANTHROPIC_API_KEY`", readme)
         self.assertNotIn("如果这两个旧值还在 secret 里，也会继续兼容", readme)
 

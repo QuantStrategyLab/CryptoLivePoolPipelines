@@ -7,7 +7,7 @@ name: Auto Merge Optimization PR
 
 jobs:
   auto-merge:
-    if: github.event.workflow_run.conclusion == 'success' && (startsWith(github.event.workflow_run.head_branch, 'automation/monthly-optimization-issue-') || startsWith(github.event.workflow_run.head_branch, 'codex/monthly-optimization-issue-'))
+    if: github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'codex/monthly-optimization-issue-')
     runs-on: ubuntu-latest
     permissions:
       contents: write

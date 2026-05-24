@@ -21,49 +21,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Detect GitHub App credentials
-        id: cross_repo_credentials
-        env:
-          APP_ID: ${{ vars.CROSS_REPO_GITHUB_APP_ID }}
-          APP_PRIVATE_KEY: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
-        run: |
-          if [ -n "$APP_ID" ] && [ -n "$APP_PRIVATE_KEY" ]; then
-            echo "has_app_credentials=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_app_credentials=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create GitHub App token for cross-repo access
-        id: cross_repo_app_token
-        if: steps.cross_repo_credentials.outputs.has_app_credentials == 'true'
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ vars.CROSS_REPO_GITHUB_APP_ID }}
-          private-key: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: |
-            CryptoSnapshotPipelines
-            CryptoStrategies
-          permission-actions: write
-          permission-issues: write
-
-      - name: Resolve cross-repo access token
-        id: cross_repo_token
-        env:
-          APP_TOKEN: ${{ steps.cross_repo_app_token.outputs.token }}
-          FALLBACK_TOKEN: ${{ secrets.CROSS_REPO_GITHUB_TOKEN }}
-        run: |
-          if [ -n "$APP_TOKEN" ]; then
-            echo "token=$APP_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "source=github_app" >> "$GITHUB_OUTPUT"
-          elif [ -n "$FALLBACK_TOKEN" ]; then
-            echo "token=$FALLBACK_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "source=personal_access_token" >> "$GITHUB_OUTPUT"
-          else
-            echo "Missing cross-repo credentials. Configure GitHub App secrets or CROSS_REPO_GITHUB_TOKEN." >&2
-            exit 1
-          fi
-
       - name: Download upstream AI review artifact
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,18 +88,6 @@ jobs:
             --output-file data/output/monthly_optimization/fanout/crypto_snapshot_pipelines.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Fan out CryptoStrategies task issue
-        run: |
-          python3 scripts/fanout_monthly_optimization_tasks.py \
-            --plan-file data/output/monthly_optimization/optimization_plan.json \
-            --owner-repo CryptoStrategies \
-            --repo "QuantStrategyLab/CryptoStrategies" \
-            --planner-issue-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/issues/${{ steps.optimization_issue.outputs.issue_number }}" \
-            --output-file data/output/monthly_optimization/fanout/crypto_strategies.json \
-            --allow-permission-skip
-        env:
-          GITHUB_TOKEN: ${{ steps.cross_repo_token.outputs.token }}
 
       - name: Append fanout summary
         run: |
