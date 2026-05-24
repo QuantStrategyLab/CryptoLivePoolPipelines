@@ -534,9 +534,11 @@ Behavior:
 
 After the monthly report bundle is assembled, the workflow creates a GitHub Issue containing the full `ai_review_input.md` content. The automated review route dispatches `QuantStrategyLab/CryptoCodexAuditBridge`. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`:
 
-- `auto` (default): run the self-hosted Codex path first; if Codex setup or execution fails and the bridge has `OPENAI_API_KEY`, post the API review fallback from the bridge. If the API fallback is not configured, fail loudly.
+- `auto` (default): run the self-hosted Codex path first; if Codex setup or execution fails, post the configured API fallback review from the bridge. Configure both `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` in the bridge for dual-AI fallback. If no API fallback key is configured, fail loudly.
 - `codex`: run Codex on the self-hosted VPS runner, post the audit result, and open a PR directly for safe low-risk fixes without API fallback.
+- `api`: run the configured API fallback reviewers inside the bridge and post a combined review comment only.
 - `openai`: run an API review inside the bridge and post a review comment only.
+- `anthropic`: run a Claude API review inside the bridge and post a review comment only.
 
 If the bridge dispatch itself fails, the monthly publish workflow fails loudly instead of silently skipping review.
 
@@ -552,9 +554,11 @@ Review output is posted back to the monthly issue.
 
 ### Optional Bridge API Fallback
 
-- `SELFHOSTED_CODEX_REVIEW_PROVIDER`: defaults to `auto`; set to `codex` to disable API fallback or `openai` for API-only review.
+- `SELFHOSTED_CODEX_REVIEW_PROVIDER`: defaults to `auto`; set to `codex` to disable API fallback, `api` for configured API reviewers, or `openai` / `anthropic` for a single API reviewer.
 - `OPENAI_API_KEY`: configure in `CryptoCodexAuditBridge`, not this source repository.
+- `ANTHROPIC_API_KEY`: configure in `CryptoCodexAuditBridge`, not this source repository.
 - `OPENAI_MODEL`: optional bridge repository variable, default `gpt-5.4-mini`.
+- `ANTHROPIC_MODEL`: optional bridge repository variable, default `claude-sonnet-4-6`.
 
 The default production configuration does not need model API secrets because it uses Codex through `CryptoCodexAuditBridge`.
 
@@ -563,6 +567,7 @@ Setup:
 ```bash
 gh variable set SELFHOSTED_CODEX_REVIEW_PROVIDER --body auto
 gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-..."
+gh secret set ANTHROPIC_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-ant-..."
 ```
 
 Source-local legacy AI review workflows are intentionally not kept in this repository. Provider fallback lives in `CryptoCodexAuditBridge`, so this source repository does not need Anthropic/OpenAI secrets.

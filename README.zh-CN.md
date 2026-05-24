@@ -381,9 +381,11 @@ make monthly-review-briefing
 
 月报 bundle 组装完成后，workflow 会自动创建一个 GitHub Issue，内容为完整的 `ai_review_input.md`。自动审阅路径会 dispatch `QuantStrategyLab/CryptoCodexAuditBridge`，由 bridge 统一决定 provider：
 
-- `auto`（默认）：先跑 self-hosted Codex 路径；如果 Codex 准备或执行失败且 bridge 配置了 `OPENAI_API_KEY`，由 bridge 回落到 OpenAI API 审阅；如果 API fallback 没配置则明确失败。
+- `auto`（默认）：先跑 self-hosted Codex 路径；如果 Codex 准备或执行失败，由 bridge 回落到已配置的 API 审阅。要启用双 AI fallback，把 `OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY` 都配置在 bridge；如果没有任何 API fallback key，则明确失败。
 - `codex`：只跑 Codex，不使用 API fallback。
+- `api`：在 bridge 内运行已配置的 API fallback reviewers，只回帖，不改代码。
 - `openai`：在 bridge 内运行 API 审阅，只回帖，不改代码。
+- `anthropic`：在 bridge 内运行 Claude API 审阅，只回帖，不改代码。
 
 如果 bridge dispatch 本身失败，monthly publish workflow 会直接失败，而不是静默跳过审阅。
 
@@ -399,9 +401,11 @@ AI 审阅覆盖范围：
 
 ### 可选 Bridge API Fallback
 
-- `SELFHOSTED_CODEX_REVIEW_PROVIDER`：默认 `auto`；设置为 `codex` 可关闭 API fallback，设置为 `openai` 可只跑 API 审阅。
+- `SELFHOSTED_CODEX_REVIEW_PROVIDER`：默认 `auto`；设置为 `codex` 可关闭 API fallback，设置为 `api` 可跑已配置的 API reviewers，设置为 `openai` / `anthropic` 可只跑单一 API 审阅。
 - `OPENAI_API_KEY`：配置在 `CryptoCodexAuditBridge`，不要配置在当前 source repo。
+- `ANTHROPIC_API_KEY`：配置在 `CryptoCodexAuditBridge`，不要配置在当前 source repo。
 - `OPENAI_MODEL`：可选 bridge repo variable，默认 `gpt-5.4-mini`。
+- `ANTHROPIC_MODEL`：可选 bridge repo variable，默认 `claude-sonnet-4-6`。
 
 默认生产配置不需要模型 API secrets，因为默认使用 `CryptoCodexAuditBridge` 的 Codex provider。
 
@@ -410,6 +414,7 @@ AI 审阅覆盖范围：
 ```bash
 gh variable set SELFHOSTED_CODEX_REVIEW_PROVIDER --body auto
 gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-..."
+gh secret set ANTHROPIC_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-ant-..."
 ```
 
 本仓库不再保留 source-local `ai_review.yml` 或 Claude 自动优化 workflow。provider fallback 统一放在 `CryptoCodexAuditBridge`，因此当前 source repo 不需要配置 Anthropic/OpenAI secrets。
