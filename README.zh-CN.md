@@ -382,7 +382,7 @@ make monthly-review-briefing
 
 月报 bundle 组装完成后，workflow 会自动创建一个 GitHub Issue，内容为完整的 `ai_review_input.md`。自动审阅路径会 dispatch `QuantStrategyLab/CryptoCodexAuditBridge`，由 bridge 统一决定 provider：
 
-- `auto`（默认）：先跑 Codex；如果 Codex 失败且 bridge 配置了 `OPENAI_API_KEY`，由 bridge 回落到 OpenAI API 审阅；如果 API fallback 没配置则明确失败。
+- `auto`（默认）：先跑 self-hosted Codex 路径；如果 Codex 准备或执行失败且 bridge 配置了 `OPENAI_API_KEY`，由 bridge 回落到 OpenAI API 审阅；如果 API fallback 没配置则明确失败。
 - `codex`：只跑 Codex，不使用 API fallback。
 - `openai`：在 bridge 内运行 API 审阅，只回帖，不改代码。
 
