@@ -1,8 +1,6 @@
 name: Experiment Validation
 
 "on":
-  issues:
-    types: [opened, edited, reopened, labeled]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -11,7 +9,6 @@ name: Experiment Validation
 
 jobs:
   validate:
-    if: contains(github.event.issue.labels.*.name, 'monthly-optimization-task') || inputs.issue_number != ''
     runs-on:
       - self-hosted
       - Linux
@@ -78,7 +75,7 @@ jobs:
           PY
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ inputs.issue_number || github.event.issue.number }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
 
       - name: Prepare experiment validation payload
         id: experiment_payload
@@ -131,7 +128,7 @@ jobs:
         run: |
           python3 scripts/post_experiment_validation_comment.py \
             --repo "${GITHUB_REPOSITORY}" \
-            --issue-number "${{ inputs.issue_number || github.event.issue.number }}" \
+            --issue-number "${{ inputs.issue_number }}" \
             --review-file data/output/experiment_validation/validation_summary.md \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
@@ -139,5 +136,5 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: experiment-validation-${{ inputs.issue_number || github.event.issue.number }}
+          name: experiment-validation-${{ inputs.issue_number }}
           path: data/output/experiment_validation/
