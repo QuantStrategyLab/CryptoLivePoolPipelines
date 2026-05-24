@@ -10,7 +10,7 @@ from typing import Any
 
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2}
 SCHEMA_VERSION = "2026-04-02"
-REPO_ORDER = ["CryptoSnapshotPipelines", "CryptoStrategies"]
+REPO_ORDER = ["CryptoSnapshotPipelines"]
 MANUAL_REVIEW_PREFIXES = (
     "check ",
     "review ",

@@ -33,7 +33,7 @@ class BuildMonthlyOptimizationPlanTests(unittest.TestCase):
         self.assertEqual(len(plan["safe_auto_pr_candidates"]), 1)
         self.assertEqual(len(plan["experiment_candidates"]), 1)
 
-    def test_build_plan_keeps_downstream_actions_out_of_scope(self) -> None:
+    def test_build_plan_keeps_non_snapshot_actions_out_of_scope(self) -> None:
         upstream_review = {
             "source_repo": "QuantStrategyLab/CryptoSnapshotPipelines",
             "review_kind": "upstream_selector",
@@ -63,10 +63,13 @@ class BuildMonthlyOptimizationPlanTests(unittest.TestCase):
 
         plan = build_plan(upstream_review)
 
+        self.assertNotIn("CryptoStrategies", plan["repo_action_summary"])
         self.assertNotIn("BinancePlatform", plan["repo_action_summary"])
-        self.assertIn("CryptoStrategies", plan["repo_action_summary"])
-        self.assertEqual(plan["out_of_scope_actions"][0]["owner_repo"], "BinancePlatform")
-        self.assertEqual(len(plan["safe_auto_pr_candidates"]), 1)
+        self.assertEqual(
+            sorted(action["owner_repo"] for action in plan["out_of_scope_actions"]),
+            ["BinancePlatform", "CryptoStrategies"],
+        )
+        self.assertEqual(len(plan["safe_auto_pr_candidates"]), 0)
 
     def test_render_summary_markdown_mentions_source_reviews_and_repos(self) -> None:
         plan = {
