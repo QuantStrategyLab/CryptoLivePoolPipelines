@@ -29,7 +29,7 @@ jobs:
       GCS_BUCKET: ${{ vars.GCS_BUCKET }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       SELFHOSTED_CODEX_REVIEW_ENABLED: ${{ vars.SELFHOSTED_CODEX_REVIEW_ENABLED || 'true' }}
-      SELFHOSTED_CODEX_REVIEW_REPOSITORY: ${{ vars.SELFHOSTED_CODEX_REVIEW_REPOSITORY || 'QuantStrategyLab/CryptoCodexAuditBridge' }}
+      SELFHOSTED_CODEX_REVIEW_REPOSITORY: ${{ vars.SELFHOSTED_CODEX_REVIEW_REPOSITORY || 'QuantStrategyLab/CodexAuditBridge' }}
       SELFHOSTED_CODEX_REVIEW_MODE: ${{ vars.SELFHOSTED_CODEX_REVIEW_MODE || 'review_and_fix' }}
       SELFHOSTED_CODEX_REVIEW_PROVIDER: ${{ vars.SELFHOSTED_CODEX_REVIEW_PROVIDER || 'auto' }}
       SELFHOSTED_CODEX_REVIEW_AUTO_MERGE: ${{ vars.SELFHOSTED_CODEX_REVIEW_AUTO_MERGE || 'false' }}
@@ -195,7 +195,7 @@ jobs:
           private-key: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: |
-            CryptoCodexAuditBridge
+            CodexAuditBridge
           permission-actions: write
 
       - name: Trigger Monthly Review Automation
@@ -275,7 +275,7 @@ jobs:
               if status not in (201, 204):
                   raise RuntimeError(f"Unexpected Codex dispatch status: {status}")
               print(
-                  f"Dispatched CryptoCodexAuditBridge review for issue #{os.environ['ISSUE_NUMBER']} "
+                  f"Dispatched CodexAuditBridge review for issue #{os.environ['ISSUE_NUMBER']} "
                   f"to {target_repository}"
               )
 
