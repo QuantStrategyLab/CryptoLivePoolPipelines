@@ -532,7 +532,7 @@ Behavior:
 
 ## Automated AI Monthly Review
 
-After the monthly report bundle is assembled, the workflow creates a GitHub Issue containing the full `ai_review_input.md` content. The automated review route dispatches `QuantStrategyLab/CryptoCodexAuditBridge`. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`:
+After the monthly report bundle is assembled, the workflow creates a GitHub Issue containing the full `ai_review_input.md` content. The automated review route dispatches `QuantStrategyLab/CodexAuditBridge`. The bridge owns provider selection through `SELFHOSTED_CODEX_REVIEW_PROVIDER`:
 
 - `auto` (default): run the self-hosted Codex path first; if Codex setup or execution fails, post the configured API fallback review from the bridge. Configure both `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` in the bridge for dual-AI fallback. If no API fallback key is configured, fail loudly.
 - `codex`: run Codex on the self-hosted VPS runner, post the audit result, and open a PR directly for safe low-risk fixes without API fallback.
@@ -555,22 +555,22 @@ Review output is posted back to the monthly issue.
 ### Optional Bridge API Fallback
 
 - `SELFHOSTED_CODEX_REVIEW_PROVIDER`: defaults to `auto`; set to `codex` to disable API fallback, `api` for configured API reviewers, or `openai` / `anthropic` for a single API reviewer.
-- `OPENAI_API_KEY`: configure in `CryptoCodexAuditBridge`, not this source repository.
-- `ANTHROPIC_API_KEY`: configure in `CryptoCodexAuditBridge`, not this source repository.
+- `OPENAI_API_KEY`: configure in `CodexAuditBridge`, not this source repository.
+- `ANTHROPIC_API_KEY`: configure in `CodexAuditBridge`, not this source repository.
 - `OPENAI_MODEL`: optional bridge repository variable, default `gpt-5.4-mini`.
 - `ANTHROPIC_MODEL`: optional bridge repository variable, default `claude-sonnet-4-6`.
 
-The default production configuration does not need model API secrets because it uses Codex through `CryptoCodexAuditBridge`.
+The default production configuration does not need model API secrets because it uses Codex through `CodexAuditBridge`.
 
 Setup:
 
 ```bash
 gh variable set SELFHOSTED_CODEX_REVIEW_PROVIDER --body auto
-gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-..."
-gh secret set ANTHROPIC_API_KEY --repo QuantStrategyLab/CryptoCodexAuditBridge --body "sk-ant-..."
+gh secret set OPENAI_API_KEY --repo QuantStrategyLab/CodexAuditBridge --body "sk-..."
+gh secret set ANTHROPIC_API_KEY --repo QuantStrategyLab/CodexAuditBridge --body "sk-ant-..."
 ```
 
-Source-local legacy AI review workflows are intentionally not kept in this repository. Provider fallback lives in `CryptoCodexAuditBridge`, so this source repository does not need Anthropic/OpenAI secrets.
+Source-local legacy AI review workflows are intentionally not kept in this repository. Provider fallback lives in `CodexAuditBridge`, so this source repository does not need Anthropic/OpenAI secrets.
 
 ## Dynamic Universe Logic
 
@@ -1019,7 +1019,7 @@ Practical review file selection:
 
 Automated AI handoff:
 
-The workflow automatically creates a GitHub Issue with the `monthly-review` label, then dispatches `CryptoCodexAuditBridge`. Provider fallback is handled inside the bridge through `SELFHOSTED_CODEX_REVIEW_PROVIDER`; if the bridge dispatch fails, the workflow fails loudly. See the "Automated AI Monthly Review" section for details.
+The workflow automatically creates a GitHub Issue with the `monthly-review` label, then dispatches `CodexAuditBridge`. Provider fallback is handled inside the bridge through `SELFHOSTED_CODEX_REVIEW_PROVIDER`; if the bridge dispatch fails, the workflow fails loudly. See the "Automated AI Monthly Review" section for details.
 
 Manual AI handoff (fallback):
 
