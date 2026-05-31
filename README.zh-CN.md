@@ -2,6 +2,16 @@
 
 > ⚠️ 投资有风险，不构成投资建议，仅供学习交流用途。
 
+
+## English summary
+
+- Full English version: [`README.md`](README.md). This summary keeps an English entry point in the Chinese file.
+- Purpose: this document covers `CryptoSnapshotPipelines` for `CryptoSnapshotPipelines`.
+- Main topics: `当前状态`, `这个项目为什么存在`, `为什么不优先做深度学习`, `数据源`, `仓库结构`.
+- Read the boundaries, inputs, outputs, and permission requirements before running commands, CI jobs, dry-runs, releases, or runtime switches.
+- For live trading, secrets, Cloud Run, exchange, or broker API changes, validate in test or dry-run mode first and do not change production only from examples.
+- If this summary differs from the detailed Chinese body, follow the concrete commands, configuration keys, and constraints in the body.
+
 语言: [English](README.md) | 简体中文
 
 `CryptoSnapshotPipelines` 是加密货币策略的上游研究、特征快照和发布流水线仓库。当前生产 artifact family 仍然是 `crypto_leader_rotation` 这条 Binance Spot leader universe。
