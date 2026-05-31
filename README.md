@@ -1,5 +1,7 @@
 # CryptoSnapshotPipelines
 
+> ⚠️ 投资有风险，不构成投资建议，仅供学习交流用途。
+
 Language: English | [简体中文](README.zh-CN.md)
 
 `CryptoSnapshotPipelines` is the upstream research, feature-snapshot, and release pipeline repo for crypto strategies.

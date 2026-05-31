@@ -1,5 +1,7 @@
 # CryptoSnapshotPipelines
 
+> ⚠️ 投资有风险，不构成投资建议，仅供学习交流用途。
+
 语言: [English](README.md) | 简体中文
 
 `CryptoSnapshotPipelines` 是加密货币策略的上游研究、特征快照和发布流水线仓库。当前生产 artifact family 仍然是 `crypto_leader_rotation` 这条 Binance Spot leader universe。
