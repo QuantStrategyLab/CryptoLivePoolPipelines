@@ -76,6 +76,7 @@ Operator-facing summary entrypoints:
 - `scripts/run_monthly_report_bundle.py` for the standard monthly report bundle used by Actions artifacts and AI review handoff
 - `scripts/write_release_heartbeat.py` for the lightweight logs-branch heartbeat record
 - Monthly live-pool ordering uses a deterministic tie-break: `final_score`, then `confidence`, then `liquidity_stability`, then `avg_quote_vol_180`, then `symbol`
+- Monthly review evidence includes the latest official/challenger track composition, overlap against the official pool, next-candidate boundary, and the deterministic tie-break order.
 
 Boundary rules:
 
