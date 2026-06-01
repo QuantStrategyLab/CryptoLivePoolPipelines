@@ -1,0 +1,17 @@
+{
+  "version": "2026-06-01-core_major",
+  "as_of_date": "2026-06-01",
+  "mode": "core_major",
+  "pool_size": 5,
+  "symbols": [
+    "TRXUSDT",
+    "DOGEUSDT",
+    "XRPUSDT",
+    "LTCUSDT",
+    "LINKUSDT"
+  ],
+  "storage_prefix": "gs://binancequant-crypto-leader-rotation/crypto-leader-rotation/releases/2026-06-01-core_major",
+  "generated_at": "2026-06-01T09:08:51.691178+00:00",
+  "workflow_run_id": "26744601645",
+  "workflow_run_url": "https://github.com/QuantStrategyLab/CryptoSnapshotPipelines/actions/runs/26744601645"
+}
