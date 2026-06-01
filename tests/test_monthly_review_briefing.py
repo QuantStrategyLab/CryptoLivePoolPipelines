@@ -85,6 +85,28 @@ class MonthlyReviewBriefingTests(unittest.TestCase):
                     "official_baseline,baseline_blended_rank,blended_rank_pct,official_baseline,official_reference,64,2020-12-31,2026-03-13,official/release_index.csv\n"
                     f"challenger_topk_60,challenger_topk_60,future_topk_label_60,shadow_candidate,shadow_candidate,64,2020-12-31,{challenger_last_as_of_date},challenger/release_index.csv\n"
                 )
+            (shadow_dir / "official").mkdir()
+            (shadow_dir / "official" / "release_index.csv").write_text(
+                "version,as_of_date,pool_size,symbols,pool_stability,pool_churn\n"
+                "2026-03-13-core_major,2026-03-13,5,TRXUSDT|ETHUSDT|BCHUSDT|NEARUSDT|SOLUSDT,0.8,0.2\n",
+                encoding="utf-8",
+            )
+            (shadow_dir / "challenger").mkdir()
+            (shadow_dir / "challenger" / "release_index.csv").write_text(
+                "version,as_of_date,pool_size,symbols,pool_stability,pool_churn\n"
+                "2026-03-13-core_major,2026-03-13,5,TRXUSDT|ETHUSDT|BCHUSDT|XRPUSDT|DOGEUSDT,0.6,0.4\n",
+                encoding="utf-8",
+            )
+        (output_dir / "latest_ranking.csv").write_text(
+            "as_of_date,symbol,final_score,confidence,liquidity_stability,avg_quote_vol_180,selected_flag,current_rank\n"
+            "2026-03-13,TRXUSDT,0.90,0.70,0.90,1000,true,1\n"
+            "2026-03-13,ETHUSDT,0.80,0.60,0.80,900,true,2\n"
+            "2026-03-13,BCHUSDT,0.70,0.50,0.70,800,true,3\n"
+            "2026-03-13,NEARUSDT,0.60,0.40,0.60,700,true,4\n"
+            "2026-03-13,SOLUSDT,0.50,0.30,0.50,600,true,5\n"
+            "2026-03-13,XRPUSDT,0.49,0.20,0.40,500,false,6\n",
+            encoding="utf-8",
+        )
         return output_dir
 
     def test_build_review_payload_reports_ok_when_outputs_align(self) -> None:
@@ -101,6 +123,13 @@ class MonthlyReviewBriefingTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["official_baseline"]["pool_size"], 5)
         self.assertEqual(payload["tracks"]["challenger_topk_60"]["release_count"], 64)
+        self.assertEqual(
+            payload["track_release_previews"]["challenger_topk_60"]["symbols"],
+            ["TRXUSDT", "ETHUSDT", "BCHUSDT", "XRPUSDT", "DOGEUSDT"],
+        )
+        self.assertEqual(payload["track_release_previews"]["challenger_topk_60"]["overlap_with_official"], 3)
+        self.assertEqual(payload["selection_boundary"]["next_candidate"]["symbol"], "XRPUSDT")
+        self.assertAlmostEqual(payload["selection_boundary"]["score_gap_to_next"], 0.01)
         self.assertEqual(payload["warnings"], [])
 
     def test_build_review_payload_warns_when_track_dates_do_not_align(self) -> None:
