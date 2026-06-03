@@ -30,6 +30,12 @@ CryptoStrategies 和 BinancePlatform 应只消费通过 contract 检查的发布
 
 Snapshot artifact 的作用是让策略判断可复现：包括 ranking 输入、live-pool snapshot、manifest、validation summary 和提升证据。`live_pool.json` 和 `artifact_manifest.json` 是稳定的下游执行合约；ranking 文件和研究输出默认留在上游作为证据，除非合约明确提升它们。它们不是宣传式收益承诺。下游仓库提升 profile 前，应在适用场景下检查最新短、中、长周期产物。
 
+## 月度 review 自动化
+
+月度 publish workflow 通过 `CodexAuditBridge` 触发自动 review 和 remediation；`SELFHOSTED_CODEX_REVIEW_PROVIDER` 默认走 `auto`，优先使用 self-hosted Codex 路径，再按桥接仓库配置 fallback 到 API reviewer。`OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY` 等 provider secret 配置在 `CodexAuditBridge`，本仓库不直接读取这些 provider key。
+
+生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；旧的本仓库本地 API review workflow 已移除，provider 选择和 fallback 逻辑集中在 `CodexAuditBridge`。
+
 ## 仓库结构
 
 - `src/`：库代码和运行时代码。
