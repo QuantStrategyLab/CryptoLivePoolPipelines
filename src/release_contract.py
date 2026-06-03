@@ -61,7 +61,7 @@ REQUIRED_ARTIFACT_MANIFEST_ARTIFACTS = {
     "live_pool": "live_pool.json",
     "live_pool_legacy": "live_pool_legacy.json",
 }
-EXPECTED_ARTIFACT_CONTRACT_VERSION = "crypto_leader_rotation.live_pool.v1"
+EXPECTED_ARTIFACT_CONTRACT_VERSION = "crypto_live_pool_rotation.live_pool.v1"
 
 
 def _sha256_file(path: Path) -> str:
@@ -512,8 +512,8 @@ def validate_release_outputs(
             errors.append(
                 f"artifact_manifest.json contract_version must be {EXPECTED_ARTIFACT_CONTRACT_VERSION}"
             )
-        if str(artifact_manifest.get("strategy_profile", "")).strip() != "crypto_leader_rotation":
-            errors.append("artifact_manifest.json strategy_profile must be crypto_leader_rotation")
+        if str(artifact_manifest.get("strategy_profile", "")).strip() != "crypto_live_pool_rotation":
+            errors.append("artifact_manifest.json strategy_profile must be crypto_live_pool_rotation")
         if str(artifact_manifest.get("artifact_type", "")).strip() != "live_pool":
             errors.append("artifact_manifest.json artifact_type must be live_pool")
         if str(artifact_manifest.get("primary_artifact", "")).strip() != "live_pool":

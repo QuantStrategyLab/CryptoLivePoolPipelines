@@ -32,13 +32,12 @@ Primary production outputs:
 
 Primary publish targets:
 
-- GCS current pointers under `crypto-leader-rotation/current`
-- GCS versioned release objects under `crypto-leader-rotation/releases/<version>`
-- Firestore `strategy/CRYPTO_LEADER_ROTATION_LIVE_POOL`
+- GCS current pointers under `crypto-live-pool-pipelines/current`
+- GCS versioned release objects under `crypto-live-pool-pipelines/releases/<version>`
+- Firestore `strategy/CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL`
 
-The GCS prefix, Firestore document, and `source_project` value intentionally
-remain in the `crypto-leader-rotation` v1 artifact namespace for downstream
-compatibility.
+The GCS prefix, Firestore document, and `source_project` value use the
+`crypto-live-pool-pipelines` v1 artifact namespace.
 
 This repository owns the monthly live-pool membership, ranking, and published
 symbol order. Downstream runtime repositories should consume the validated
@@ -221,7 +220,7 @@ Use rollback only when the newest publish is clearly bad or malformed.
 1. Identify the last known good version from:
 
 - Firestore document history
-- GCS `crypto-leader-rotation/releases/<version>/`
+- GCS `crypto-live-pool-pipelines/releases/<version>/`
 - the last good `data/output/release_manifest.json`
 
 2. Restore the five canonical artifacts from that version into `data/output/`:
@@ -256,6 +255,6 @@ Rollback note:
 - Confirm `release_status_summary.json` reports `status=ok` for the published month.
 - Confirm `data/output/monthly_report_bundle/job_summary.md` matches the released month and includes the expected bundle file list.
 - Confirm the Actions run uploaded a `monthly-report-<as_of_date>` artifact for download.
-- Confirm Firestore `strategy/CRYPTO_LEADER_ROTATION_LIVE_POOL` contains the expected `version`, `mode`, `symbols`, and `source_project`.
+- Confirm Firestore `strategy/CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL` contains the expected `version`, `mode`, `symbols`, and `source_project`.
 - Confirm GCS current pointers and versioned objects exist for the same version.
 - Confirm downstream consumers are reading the new version without falling back to degraded sources.

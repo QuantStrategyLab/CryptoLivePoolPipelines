@@ -10,9 +10,9 @@ from .ranking import sort_ranking_snapshot
 from .utils import date_to_str, write_json
 
 
-DEFAULT_STRATEGY_PROFILE = "crypto_leader_rotation"
+DEFAULT_STRATEGY_PROFILE = "crypto_live_pool_rotation"
 DEFAULT_ARTIFACT_TYPE = "live_pool"
-DEFAULT_ARTIFACT_CONTRACT_VERSION = "crypto_leader_rotation.live_pool.v1"
+DEFAULT_ARTIFACT_CONTRACT_VERSION = "crypto_live_pool_rotation.live_pool.v1"
 
 
 def _sha256_file(path: Path) -> str:
@@ -75,7 +75,7 @@ def build_live_pool_payload(
     as_of_date: pd.Timestamp,
     pool_size: int,
     mode: str = "core_major",
-    source_project: str = "crypto-leader-rotation",
+    source_project: str = "crypto-live-pool-pipelines",
     selection_meta_fields: list[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build additive live-pool payloads without performing I/O."""
@@ -137,7 +137,7 @@ def export_live_pool(
     as_of_date: pd.Timestamp,
     pool_size: int,
     mode: str = "core_major",
-    source_project: str = "crypto-leader-rotation",
+    source_project: str = "crypto-live-pool-pipelines",
     selection_meta_fields: list[str] | None = None,
     save_legacy: bool = True,
 ) -> dict[str, Any]:
@@ -165,7 +165,7 @@ def build_strategy_artifact_manifest(
     strategy_profile: str = DEFAULT_STRATEGY_PROFILE,
     artifact_type: str = DEFAULT_ARTIFACT_TYPE,
     contract_version: str = DEFAULT_ARTIFACT_CONTRACT_VERSION,
-    source_project: str = "crypto-leader-rotation",
+    source_project: str = "crypto-live-pool-pipelines",
     generated_at: Any | None = None,
 ) -> dict[str, Any]:
     """Build the profile-aware artifact manifest consumed by downstream runtimes."""
@@ -231,7 +231,7 @@ def export_strategy_artifact_manifest(
     strategy_profile: str = DEFAULT_STRATEGY_PROFILE,
     artifact_type: str = DEFAULT_ARTIFACT_TYPE,
     contract_version: str = DEFAULT_ARTIFACT_CONTRACT_VERSION,
-    source_project: str = "crypto-leader-rotation",
+    source_project: str = "crypto-live-pool-pipelines",
 ) -> dict[str, Any]:
     manifest = build_strategy_artifact_manifest(
         output_dir=output_dir,

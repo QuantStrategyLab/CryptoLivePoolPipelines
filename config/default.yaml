@@ -1,5 +1,5 @@
 project:
-  name: "crypto-leader-rotation"
+  name: "crypto-live-pool-pipelines"
   timezone: "UTC"
 
 release:
@@ -269,10 +269,10 @@ publish:
   mode: "core_major"
   gcp_project_id: null
   gcs_bucket: null
-  gcs_root_prefix: "crypto-leader-rotation"
+  gcs_root_prefix: "crypto-live-pool-pipelines"
   firestore_collection: "strategy"
-  firestore_document: "CRYPTO_LEADER_ROTATION_LIVE_POOL"
-  source_project: "crypto-leader-rotation"
+  firestore_document: "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL"
+  source_project: "crypto-live-pool-pipelines"
   upload_current_pointer: true
 
 external_data:

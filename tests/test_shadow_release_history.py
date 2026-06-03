@@ -42,7 +42,7 @@ class ShadowReleaseHistoryTests(unittest.TestCase):
         )
         config = {
             "export": {"live_pool_size": 2},
-            "publish": {"mode": "core_major", "source_project": "crypto-leader-rotation"},
+            "publish": {"mode": "core_major", "source_project": "crypto-live-pool-pipelines"},
             "universe": {"live_mode": "core_major"},
         }
 

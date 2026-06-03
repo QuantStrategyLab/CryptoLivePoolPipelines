@@ -89,7 +89,7 @@ def resolve_publish_settings(
         mode=str(effective_mode),
         gcp_project_id=gcp_project_id or os.getenv("GCP_PROJECT_ID") or publish_cfg.get("gcp_project_id"),
         gcs_bucket=gcs_bucket or os.getenv("GCS_BUCKET") or publish_cfg.get("gcs_bucket"),
-        gcs_root_prefix=str(publish_cfg.get("gcs_root_prefix", "crypto-leader-rotation")).strip("/"),
+        gcs_root_prefix=str(publish_cfg.get("gcs_root_prefix", "crypto-live-pool-pipelines")).strip("/"),
         firestore_collection=(
             firestore_collection
             or os.getenv("FIRESTORE_COLLECTION")
@@ -98,9 +98,9 @@ def resolve_publish_settings(
         firestore_document=(
             firestore_document
             or os.getenv("FIRESTORE_DOCUMENT")
-            or publish_cfg.get("firestore_document", "CRYPTO_LEADER_ROTATION_LIVE_POOL")
+            or publish_cfg.get("firestore_document", "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL")
         ),
-        source_project=str(publish_cfg.get("source_project", config.get("project", {}).get("name", "crypto-leader-rotation"))),
+        source_project=str(publish_cfg.get("source_project", config.get("project", {}).get("name", "crypto-live-pool-pipelines"))),
         upload_current_pointer=parse_bool(
             os.getenv("UPLOAD_CURRENT_POINTER"),
             publish_cfg.get("upload_current_pointer", True),

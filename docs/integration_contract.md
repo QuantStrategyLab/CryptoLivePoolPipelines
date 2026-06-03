@@ -9,7 +9,7 @@
 - 风险提示：涉及实盘、密钥、权限、Cloud Run、交易所或券商 API 的变更，必须先在测试环境或 dry-run 验证；不要只凭示例直接修改生产。
 - 英文正文保留更完整的命令、字段名和配置键；如果摘要和正文不一致，以正文中的实际命令和配置为准。
 This document defines the production contract exposed by `CryptoLivePoolPipelines` to downstream strategy systems.
-The current v1 artifact namespace remains `crypto-leader-rotation` for compatibility with existing published objects and downstream readers.
+The current v1 artifact namespace is `crypto-live-pool-pipelines`.
 
 The upstream project publishes a monthly `core_major` live pool and exposes it through:
 
@@ -19,7 +19,7 @@ The upstream project publishes a monthly `core_major` live pool and exposes it t
 
 ## Authority Boundary
 
-`CryptoLivePoolPipelines` owns monthly live-pool membership, ranking, and order for `crypto_leader_rotation`. Downstream strategy and execution repositories should treat the ordered `symbols` list from `live_pool.json` or `artifact_manifest.json` as canonical.
+`CryptoLivePoolPipelines` owns monthly live-pool membership, ranking, and order for `crypto_live_pool_rotation`. Downstream strategy and execution repositories should treat the ordered `symbols` list from `live_pool.json` or `artifact_manifest.json` as canonical.
 
 Downstream systems may apply runtime execution gates, sell rules, top-N selection, sizing, and degraded-source policy after artifact validation. They should not recalculate monthly membership or replace the published order from local indicators. `latest_ranking.csv` and `selection_meta` are upstream evidence and diagnostics; `live_pool.json` plus `artifact_manifest.json` are the stable execution contract.
 
@@ -34,10 +34,10 @@ binding to `CryptoLivePoolPipelines` internals.
 Required stable fields:
 
 - `manifest_type = strategy_artifact`
-- `contract_version = crypto_leader_rotation.live_pool.v1`
-- `strategy_profile = crypto_leader_rotation`
+- `contract_version = crypto_live_pool_rotation.live_pool.v1`
+- `strategy_profile = crypto_live_pool_rotation`
 - `artifact_type = live_pool`
-- `artifact_name = crypto_leader_rotation_live_pool`
+- `artifact_name = crypto_live_pool_rotation_live_pool`
 - `as_of_date`
 - `snapshot_as_of`
 - `version`
@@ -57,8 +57,8 @@ The `artifacts` mapping includes relative file paths and SHA-256 checksums for:
 - `live_pool_legacy`
 
 Downstream platforms should treat this manifest as the strategy artifact
-contract and keep legacy `live_pool_legacy.json` parsing as a compatibility
-path, not as the only contract shape.
+contract. `live_pool_legacy.json` remains a secondary payload shape for scripts
+that need a direct symbol mapping.
 
 ### `live_pool_legacy.json`
 
@@ -86,7 +86,7 @@ Schema:
     "NEARUSDT": {"base_asset": "NEAR"},
     "LTCUSDT": {"base_asset": "LTC"}
   },
-  "source_project": "crypto-leader-rotation"
+  "source_project": "crypto-live-pool-pipelines"
 }
 ```
 
@@ -119,7 +119,7 @@ This file contains both the ordered list and the symbol mapping:
     "NEARUSDT": {"base_asset": "NEAR"},
     "LTCUSDT": {"base_asset": "LTC"}
   },
-  "source_project": "crypto-leader-rotation"
+  "source_project": "crypto-live-pool-pipelines"
 }
 ```
 
@@ -152,7 +152,7 @@ Optional additive research extension:
 Collection and document defaults:
 
 - collection: `strategy`
-- document: `CRYPTO_LEADER_ROTATION_LIVE_POOL`
+- document: `CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL`
 
 Payload example:
 
@@ -170,18 +170,18 @@ Payload example:
     "NEARUSDT": {"base_asset": "NEAR"},
     "LTCUSDT": {"base_asset": "LTC"}
   },
-  "storage_prefix": "gs://example-bucket/crypto-leader-rotation/releases/2026-03-13-core_major",
-  "current_prefix": "gs://example-bucket/crypto-leader-rotation/current",
-  "live_pool_legacy_uri": "gs://example-bucket/crypto-leader-rotation/current/live_pool_legacy.json",
-  "live_pool_uri": "gs://example-bucket/crypto-leader-rotation/current/live_pool.json",
-  "artifact_manifest_uri": "gs://example-bucket/crypto-leader-rotation/current/artifact_manifest.json",
-  "latest_universe_uri": "gs://example-bucket/crypto-leader-rotation/current/latest_universe.json",
-  "latest_ranking_uri": "gs://example-bucket/crypto-leader-rotation/current/latest_ranking.csv",
-  "versioned_live_pool_legacy_uri": "gs://example-bucket/crypto-leader-rotation/releases/2026-03-13-core_major/live_pool_legacy.json",
-  "versioned_artifact_manifest_uri": "gs://example-bucket/crypto-leader-rotation/releases/2026-03-13-core_major/artifact_manifest.json",
-  "artifact_contract_version": "crypto_leader_rotation.live_pool.v1",
+  "storage_prefix": "gs://example-bucket/crypto-live-pool-pipelines/releases/2026-03-13-core_major",
+  "current_prefix": "gs://example-bucket/crypto-live-pool-pipelines/current",
+  "live_pool_legacy_uri": "gs://example-bucket/crypto-live-pool-pipelines/current/live_pool_legacy.json",
+  "live_pool_uri": "gs://example-bucket/crypto-live-pool-pipelines/current/live_pool.json",
+  "artifact_manifest_uri": "gs://example-bucket/crypto-live-pool-pipelines/current/artifact_manifest.json",
+  "latest_universe_uri": "gs://example-bucket/crypto-live-pool-pipelines/current/latest_universe.json",
+  "latest_ranking_uri": "gs://example-bucket/crypto-live-pool-pipelines/current/latest_ranking.csv",
+  "versioned_live_pool_legacy_uri": "gs://example-bucket/crypto-live-pool-pipelines/releases/2026-03-13-core_major/live_pool_legacy.json",
+  "versioned_artifact_manifest_uri": "gs://example-bucket/crypto-live-pool-pipelines/releases/2026-03-13-core_major/artifact_manifest.json",
+  "artifact_contract_version": "crypto_live_pool_rotation.live_pool.v1",
   "generated_at": "2026-03-13T13:00:00+00:00",
-  "source_project": "crypto-leader-rotation"
+  "source_project": "crypto-live-pool-pipelines"
 }
 ```
 
@@ -199,21 +199,21 @@ Stable vs additive fields:
 Versioned release objects:
 
 ```text
-gs://<bucket>/crypto-leader-rotation/releases/<YYYY-MM-DD-mode>/latest_universe.json
-gs://<bucket>/crypto-leader-rotation/releases/<YYYY-MM-DD-mode>/latest_ranking.csv
-gs://<bucket>/crypto-leader-rotation/releases/<YYYY-MM-DD-mode>/live_pool.json
-gs://<bucket>/crypto-leader-rotation/releases/<YYYY-MM-DD-mode>/live_pool_legacy.json
-gs://<bucket>/crypto-leader-rotation/releases/<YYYY-MM-DD-mode>/artifact_manifest.json
+gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/latest_universe.json
+gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/latest_ranking.csv
+gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/live_pool.json
+gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/live_pool_legacy.json
+gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/artifact_manifest.json
 ```
 
 Current pointers:
 
 ```text
-gs://<bucket>/crypto-leader-rotation/current/latest_universe.json
-gs://<bucket>/crypto-leader-rotation/current/latest_ranking.csv
-gs://<bucket>/crypto-leader-rotation/current/live_pool.json
-gs://<bucket>/crypto-leader-rotation/current/live_pool_legacy.json
-gs://<bucket>/crypto-leader-rotation/current/artifact_manifest.json
+gs://<bucket>/crypto-live-pool-pipelines/current/latest_universe.json
+gs://<bucket>/crypto-live-pool-pipelines/current/latest_ranking.csv
+gs://<bucket>/crypto-live-pool-pipelines/current/live_pool.json
+gs://<bucket>/crypto-live-pool-pipelines/current/live_pool_legacy.json
+gs://<bucket>/crypto-live-pool-pipelines/current/artifact_manifest.json
 ```
 
 ## Local Shadow Release History
@@ -286,7 +286,7 @@ This wrapper refreshes the official baseline artifacts, runs the publish dry-run
 
 ## Recommended Downstream Read Priority
 
-1. Read Firestore `strategy/CRYPTO_LEADER_ROTATION_LIVE_POOL`
+1. Read Firestore `strategy/CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL`
 2. If the latest Firestore payload is invalid or unavailable, prefer the downstream script's last known good upstream payload
 3. If explicitly configured, read the synchronized `live_pool_legacy.json` or `live_pool.json`
 4. If all upstream-aware layers fail, fall back to the downstream script's static universe as an emergency-only path
@@ -302,7 +302,7 @@ Freshness semantics:
 
 ```python
 def load_trend_pool():
-    payload = try_read_firestore("strategy", "CRYPTO_LEADER_ROTATION_LIVE_POOL")
+    payload = try_read_firestore("strategy", "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL")
     if is_valid_and_fresh(payload):
         return payload["symbol_map"], {"source": "fresh_upstream"}
 
@@ -321,7 +321,7 @@ def load_trend_pool():
 
 Preferred rollback:
 
-1. choose the previous version under `gs://<bucket>/crypto-leader-rotation/releases/`
+1. choose the previous version under `gs://<bucket>/crypto-live-pool-pipelines/releases/`
 2. copy its four artifacts back onto the `current/` prefix
 3. update the Firestore summary document so `version`, `as_of_date`, and URIs point to that release
 

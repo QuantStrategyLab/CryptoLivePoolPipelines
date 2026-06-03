@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 
-def get_logger(name: str = "crypto_leader_rotation") -> logging.Logger:
+def get_logger(name: str = "crypto_live_pool_rotation") -> logging.Logger:
     """Create a process-wide console logger with a simple format."""
     logger = logging.getLogger(name)
     if logger.handlers:
