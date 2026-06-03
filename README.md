@@ -1,4 +1,4 @@
-# CryptoSnapshotPipelines
+# CryptoLivePoolPipelines
 
 [Chinese README](README.zh-CN.md)
 
@@ -6,7 +6,7 @@
 
 ## What this repository is
 
-CryptoSnapshotPipelines is the QuantStrategyLab crypto snapshot and release pipeline. It is the authority for monthly crypto live-pool membership, ordering, rankings, shadow candidate tracks, and release artifacts used by CryptoStrategies.
+CryptoLivePoolPipelines is the QuantStrategyLab crypto live-pool and release pipeline. It is the authority for monthly crypto live-pool membership, ordering, rankings, shadow candidate tracks, and release artifacts used by CryptoStrategies.
 
 It is an evidence-producing repository. It does not place trades and should not be treated as an execution platform.
 
@@ -28,7 +28,7 @@ CryptoStrategies and BinancePlatform should consume only release artifacts that 
 
 ## What the artifacts are for
 
-Snapshot artifacts are used to make strategy decisions reproducible: ranking inputs, live-pool snapshots, manifests, validation summaries, and promotion evidence. `live_pool.json` and `artifact_manifest.json` are the stable downstream execution contract; ranking files and research outputs stay upstream evidence unless the contract explicitly promotes them. They are not marketing claims. Before a downstream repository promotes a profile, review the latest artifacts across short, medium, and long windows where applicable.
+Live-pool artifacts are used to make strategy decisions reproducible: ranking inputs, live-pool snapshots, manifests, validation summaries, and promotion evidence. `live_pool.json` and `artifact_manifest.json` are the stable downstream execution contract; ranking files and research outputs stay upstream evidence unless the contract explicitly promotes them. They are not marketing claims. Before a downstream repository promotes a profile, review the latest artifacts across short, medium, and long windows where applicable.
 
 ## Repository layout
 

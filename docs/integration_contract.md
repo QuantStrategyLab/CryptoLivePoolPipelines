@@ -3,12 +3,12 @@
 
 ## 中文摘要
 
-- 用途：本文档围绕 `Integration Contract`，用于理解 `CryptoSnapshotPipelines` 的配置、运行、部署、研究或验收边界。
+- 用途：本文档围绕 `Integration Contract`，用于理解 `CryptoLivePoolPipelines` 的配置、运行、部署、研究或验收边界。
 - 主要覆盖：`Canonical Downstream Files`、``artifact_manifest.json``、``live_pool_legacy.json``、``live_pool.json``、`Firestore Contract`。
 - 阅读顺序：先确认边界、输入输出和权限要求，再执行文档里的命令、CI、dry-run、发布或切换步骤。
 - 风险提示：涉及实盘、密钥、权限、Cloud Run、交易所或券商 API 的变更，必须先在测试环境或 dry-run 验证；不要只凭示例直接修改生产。
 - 英文正文保留更完整的命令、字段名和配置键；如果摘要和正文不一致，以正文中的实际命令和配置为准。
-This document defines the production contract exposed by `CryptoSnapshotPipelines` to downstream strategy systems.
+This document defines the production contract exposed by `CryptoLivePoolPipelines` to downstream strategy systems.
 The current v1 artifact namespace remains `crypto-leader-rotation` for compatibility with existing published objects and downstream readers.
 
 The upstream project publishes a monthly `core_major` live pool and exposes it through:
@@ -19,7 +19,7 @@ The upstream project publishes a monthly `core_major` live pool and exposes it t
 
 ## Authority Boundary
 
-`CryptoSnapshotPipelines` owns monthly live-pool membership, ranking, and order for `crypto_leader_rotation`. Downstream strategy and execution repositories should treat the ordered `symbols` list from `live_pool.json` or `artifact_manifest.json` as canonical.
+`CryptoLivePoolPipelines` owns monthly live-pool membership, ranking, and order for `crypto_leader_rotation`. Downstream strategy and execution repositories should treat the ordered `symbols` list from `live_pool.json` or `artifact_manifest.json` as canonical.
 
 Downstream systems may apply runtime execution gates, sell rules, top-N selection, sizing, and degraded-source policy after artifact validation. They should not recalculate monthly membership or replace the published order from local indicators. `latest_ranking.csv` and `selection_meta` are upstream evidence and diagnostics; `live_pool.json` plus `artifact_manifest.json` are the stable execution contract.
 
@@ -29,7 +29,7 @@ Downstream systems may apply runtime execution gates, sell rules, top-N selectio
 
 This profile-aware manifest is the canonical contract wrapper for downstream
 runtimes. It lets the execution platform validate the artifact family without
-binding to `CryptoSnapshotPipelines` internals.
+binding to `CryptoLivePoolPipelines` internals.
 
 Required stable fields:
 
