@@ -1,5 +1,36 @@
 # CryptoSnapshotPipelines
 
+<!-- qsl-doc-overview:start -->
+
+> ⚠️ 投资有风险，不构成投资建议，仅供学习交流用途。
+> ⚠️ Investing involves risk. This project does not provide investment advice and is for educational and research purposes only.
+
+## Open-source overview / 开源项目入口
+
+| Item | Description |
+| --- | --- |
+| Project type | snapshot pipeline |
+| What it does | Builds crypto feature snapshots and release artifacts for crypto strategy runtimes. |
+| 中文说明 | 加密资产 snapshot 管线，负责生成 crypto strategy runtime 消费的上游 artifact。 |
+| Current status | Research and artifact producer. Generated artifacts are not trading instructions by themselves. |
+
+### Quick start
+
+- `python -m pip install -e '.[test]'`
+- `python -m pytest -q`
+
+### Deploy / operate safely
+
+Use GitHub Actions artifact publishing paths after dry-run validation; verify exchange symbols, quote currency and GCS targets first.
+
+### Strategy performance / evidence boundary
+
+Performance/backtest evidence is in README/docs and generated CSV summaries. Keep live decisions separate from one-off artifact generation.
+
+> Detailed runbooks, migration notes, workflow internals, and historical decisions are kept below. Start with this overview before using the lower-level operational sections.
+
+<!-- qsl-doc-overview:end -->
+
 > ⚠️ 投资有风险，不构成投资建议，仅供学习交流用途。
 
 
