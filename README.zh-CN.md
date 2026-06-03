@@ -6,7 +6,7 @@
 
 ## 这个仓库是什么
 
-CryptoSnapshotPipelines 是 QuantStrategyLab 的加密货币 snapshot 与发布流水线。为 CryptoStrategies 生成 live pool、ranking、shadow candidate tracks 和发布产物。
+CryptoSnapshotPipelines 是 QuantStrategyLab 的加密货币 snapshot 与发布流水线。它是月度加密 live-pool 成员、顺序、ranking、shadow candidate tracks 和发布产物的权威来源，供 CryptoStrategies 使用。
 
 这是一个产出证据的仓库，不直接下单，也不应该被当作执行平台。
 
@@ -14,7 +14,7 @@ CryptoSnapshotPipelines 是 QuantStrategyLab 的加密货币 snapshot 与发布�
 
 ### 普通 runtime 策略
 
-交易逻辑在 CryptoStrategies。本仓库生成策略包读取的 live-pool 和验证产物。
+交易逻辑在 CryptoStrategies。本仓库生成策略包读取的 live-pool 和验证产物，并负责已发布池的月度选择和顺序。
 
 ### 本仓库处理的 Snapshot-backed 工作
 
@@ -24,11 +24,11 @@ CryptoSnapshotPipelines 是 QuantStrategyLab 的加密货币 snapshot 与发布�
 
 ### 下游如何使用
 
-CryptoStrategies 和 BinancePlatform 应只消费通过 contract 检查的发布产物。
+CryptoStrategies 和 BinancePlatform 应只消费通过 contract 检查的发布产物。下游系统应保留 `live_pool.json["symbols"]` 的顺序，不应根据本地指标重建月度池。
 
 ## 这些产物用来做什么
 
-Snapshot artifact 的作用是让策略判断可复现：包括 ranking 输入、feature snapshot、manifest、validation summary 和提升证据。它们不是宣传式收益承诺。下游仓库提升 profile 前，应在适用场景下检查最新短、中、长周期产物。
+Snapshot artifact 的作用是让策略判断可复现：包括 ranking 输入、live-pool snapshot、manifest、validation summary 和提升证据。`live_pool.json` 和 `artifact_manifest.json` 是稳定的下游执行合约；ranking 文件和研究输出默认留在上游作为证据，除非合约明确提升它们。它们不是宣传式收益承诺。下游仓库提升 profile 前，应在适用场景下检查最新短、中、长周期产物。
 
 ## 仓库结构
 

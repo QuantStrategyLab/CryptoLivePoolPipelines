@@ -17,6 +17,12 @@ The upstream project publishes a monthly `core_major` live pool and exposes it t
 2. versioned and current objects in GCS
 3. a lightweight Firestore summary document
 
+## Authority Boundary
+
+`CryptoSnapshotPipelines` owns monthly live-pool membership, ranking, and order for `crypto_leader_rotation`. Downstream strategy and execution repositories should treat the ordered `symbols` list from `live_pool.json` or `artifact_manifest.json` as canonical.
+
+Downstream systems may apply runtime execution gates, sell rules, top-N selection, sizing, and degraded-source policy after artifact validation. They should not recalculate monthly membership or replace the published order from local indicators. `latest_ranking.csv` and `selection_meta` are upstream evidence and diagnostics; `live_pool.json` plus `artifact_manifest.json` are the stable execution contract.
+
 ## Canonical Downstream Files
 
 ### `artifact_manifest.json`
@@ -130,6 +136,7 @@ Stable contract fields for downstream validation:
 Meaning:
 
 - `pool_size` and `symbols` always describe the full official exported pool for that monthly snapshot
+- `symbols` order is the official upstream monthly order and should be preserved by downstream payload normalization
 - downstream display panels, local ranking previews, or final execution targets are separate downstream-layer concepts
 
 Research/reporting extras are intentionally not part of the stable contract. Downstream consumers should not infer live readiness from local research CSVs or validation summaries.

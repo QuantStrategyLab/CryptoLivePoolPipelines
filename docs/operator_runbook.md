@@ -40,6 +40,11 @@ The GCS prefix, Firestore document, and `source_project` value intentionally
 remain in the `crypto-leader-rotation` v1 artifact namespace for downstream
 compatibility.
 
+This repository owns the monthly live-pool membership, ranking, and published
+symbol order. Downstream runtime repositories should consume the validated
+artifact contract and preserve that order when passing the pool into strategy
+code.
+
 ## Research Path Vs Production Path
 
 Production path:
@@ -81,6 +86,7 @@ Operator-facing summary entrypoints:
 Boundary rules:
 
 - Downstream execution systems should consume the validated release artifacts, not recreate the monthly report layer.
+- Downstream systems should not rerank or rebuild the monthly live pool from local runtime indicators.
 - Research reports and shadow-track diagnostics stay upstream and are not part of the minimum downstream execution contract.
 - Telegram messages from this repository are operational release notifications, not trade execution alerts.
 

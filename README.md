@@ -6,7 +6,7 @@
 
 ## What this repository is
 
-CryptoSnapshotPipelines is the QuantStrategyLab crypto snapshot and release pipeline. It builds the crypto live pool, rankings, shadow candidate tracks, and release artifacts used by CryptoStrategies.
+CryptoSnapshotPipelines is the QuantStrategyLab crypto snapshot and release pipeline. It is the authority for monthly crypto live-pool membership, ordering, rankings, shadow candidate tracks, and release artifacts used by CryptoStrategies.
 
 It is an evidence-producing repository. It does not place trades and should not be treated as an execution platform.
 
@@ -14,7 +14,7 @@ It is an evidence-producing repository. It does not place trades and should not 
 
 ### Direct runtime strategies
 
-The trading logic lives in CryptoStrategies. This repository produces the live-pool and validation artifacts that the strategy package reads.
+The trading logic lives in CryptoStrategies. This repository produces the live-pool and validation artifacts that the strategy package reads, and it owns the monthly selection and order of the published pool.
 
 ### Snapshot-backed work handled here
 
@@ -24,11 +24,11 @@ The trading logic lives in CryptoStrategies. This repository produces the live-p
 
 ### Downstream use
 
-CryptoStrategies and BinancePlatform should consume only release artifacts that pass the documented contract checks.
+CryptoStrategies and BinancePlatform should consume only release artifacts that pass the documented contract checks. Downstream systems should preserve `live_pool.json["symbols"]` order and should not rebuild the monthly pool from local indicators.
 
 ## What the artifacts are for
 
-Snapshot artifacts are used to make strategy decisions reproducible: ranking inputs, feature snapshots, manifests, validation summaries, and promotion evidence. They are not marketing claims. Before a downstream repository promotes a profile, review the latest artifacts across short, medium, and long windows where applicable.
+Snapshot artifacts are used to make strategy decisions reproducible: ranking inputs, live-pool snapshots, manifests, validation summaries, and promotion evidence. `live_pool.json` and `artifact_manifest.json` are the stable downstream execution contract; ranking files and research outputs stay upstream evidence unless the contract explicitly promotes them. They are not marketing claims. Before a downstream repository promotes a profile, review the latest artifacts across short, medium, and long windows where applicable.
 
 ## Repository layout
 
