@@ -28,7 +28,7 @@ def write_config(path: Path, output_dir: Path) -> None:
         "\n".join(
             [
                 "project:",
-                '  name: "crypto-leader-rotation"',
+                '  name: "crypto-live-pool-pipelines"',
                 "data:",
                 f'  raw_dir: "{fixture_root / "raw"}"',
                 f'  cache_dir: "{fixture_root / "cache"}"',
@@ -40,7 +40,7 @@ def write_config(path: Path, output_dir: Path) -> None:
                 "  live_pool_size: 5",
                 "  save_legacy_live_pool: true",
                 "publish:",
-                '  source_project: "crypto-leader-rotation"',
+                '  source_project: "crypto-live-pool-pipelines"',
                 "",
             ]
         ),
@@ -90,7 +90,7 @@ class BuildLivePoolSmokeTests(unittest.TestCase):
             validation = validate_release_outputs(
                 output_dir,
                 expected_mode="core_major",
-                expected_source_project="crypto-leader-rotation",
+                expected_source_project="crypto-live-pool-pipelines",
                 expected_pool_size=5,
                 require_artifact_manifest=True,
                 require_freshness=False,

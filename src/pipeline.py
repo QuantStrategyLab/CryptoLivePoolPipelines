@@ -394,7 +394,7 @@ def build_live_pool_outputs(
     source_project = str(
         config.get("publish", {}).get(
             "source_project",
-            config.get("project", {}).get("name", "crypto-leader-rotation"),
+            config.get("project", {}).get("name", "crypto-live-pool-pipelines"),
         )
     )
     live_payload = export_live_pool(

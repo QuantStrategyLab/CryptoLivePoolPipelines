@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", default="data/output", help="Directory containing release artifacts.")
     parser.add_argument("--mode", default=None, help="Optional expected mode, for example core_major.")
-    parser.add_argument("--source-project", default="crypto-leader-rotation", help="Expected source_project value.")
+    parser.add_argument("--source-project", default="crypto-live-pool-pipelines", help="Expected source_project value.")
     parser.add_argument("--expected-pool-size", type=int, default=None, help="Optional expected live pool size.")
     parser.add_argument(
         "--max-age-days",

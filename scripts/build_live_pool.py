@@ -58,7 +58,7 @@ def main() -> None:
         config["paths"].output_dir,
         expected_mode=result["universe_mode"],
         expected_source_project=str(
-            config.get("publish", {}).get("source_project", config.get("project", {}).get("name", "crypto-leader-rotation"))
+            config.get("publish", {}).get("source_project", config.get("project", {}).get("name", "crypto-live-pool-pipelines"))
         ),
         expected_pool_size=int(config["export"]["live_pool_size"]),
         max_age_days=args.contract_max_age_days,

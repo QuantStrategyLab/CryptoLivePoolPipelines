@@ -42,7 +42,7 @@ class MonthlyReviewBriefingTests(unittest.TestCase):
             "mode": "core_major",
             "pool_size": 5,
             "symbols": ["TRXUSDT", "ETHUSDT", "BCHUSDT", "NEARUSDT", "SOLUSDT"],
-            "source_project": "crypto-leader-rotation",
+            "source_project": "crypto-live-pool-pipelines",
         }
         manifest = {
             "as_of_date": "2026-03-13",
@@ -50,11 +50,11 @@ class MonthlyReviewBriefingTests(unittest.TestCase):
             "mode": "core_major",
             "dry_run": True,
             "publish_enabled": False,
-            "release_prefix": "crypto-leader-rotation/releases/2026-03-13-core_major",
-            "current_prefix": "crypto-leader-rotation/current",
+            "release_prefix": "crypto-live-pool-pipelines/releases/2026-03-13-core_major",
+            "current_prefix": "crypto-live-pool-pipelines/current",
             "firestore": {
                 "collection": "strategy",
-                "document": "CRYPTO_LEADER_ROTATION_LIVE_POOL",
+                "document": "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
             },
         }
         with (output_dir / "live_pool.json").open("w", encoding="utf-8") as handle:
@@ -70,7 +70,7 @@ class MonthlyReviewBriefingTests(unittest.TestCase):
                         "mode": "core_major",
                         "pool_size": 5,
                         "symbols": ["TRXUSDT", "ETHUSDT", "BCHUSDT", "NEARUSDT", "SOLUSDT"],
-                        "source_project": "crypto-leader-rotation",
+                        "source_project": "crypto-live-pool-pipelines",
                     },
                     "validation": {"errors": [], "warnings": []},
                 },

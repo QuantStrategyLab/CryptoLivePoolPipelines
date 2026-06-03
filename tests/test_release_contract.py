@@ -31,7 +31,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
         *,
         as_of_date: str = "2026-03-13",
         mode: str = "core_major",
-        source_project: str = "crypto-leader-rotation",
+        source_project: str = "crypto-live-pool-pipelines",
         include_manifest: bool = False,
     ) -> None:
         output_dir = root / "data" / "output"
@@ -89,10 +89,10 @@ class ReleaseContractValidationTests(unittest.TestCase):
             output_dir / "artifact_manifest.json",
             {
                 "manifest_type": "strategy_artifact",
-                "contract_version": "crypto_leader_rotation.live_pool.v1",
-                "strategy_profile": "crypto_leader_rotation",
+                "contract_version": "crypto_live_pool_rotation.live_pool.v1",
+                "strategy_profile": "crypto_live_pool_rotation",
                 "artifact_type": "live_pool",
-                "artifact_name": "crypto_leader_rotation_live_pool",
+                "artifact_name": "crypto_live_pool_rotation_live_pool",
                 "as_of_date": as_of_date,
                 "snapshot_as_of": as_of_date,
                 "version": version,
@@ -132,12 +132,12 @@ class ReleaseContractValidationTests(unittest.TestCase):
                     "dry_run": True,
                     "publish_enabled": False,
                     "as_of_date": as_of_date,
-                    "release_prefix": f"crypto-leader-rotation/releases/{version}",
-                    "current_prefix": "crypto-leader-rotation/current",
+                    "release_prefix": f"crypto-live-pool-pipelines/releases/{version}",
+                    "current_prefix": "crypto-live-pool-pipelines/current",
                     "artifacts": {},
                     "firestore": {
                         "collection": "strategy",
-                        "document": "CRYPTO_LEADER_ROTATION_LIVE_POOL",
+                        "document": "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
                         "payload": {
                             "as_of_date": as_of_date,
                             "version": version,
@@ -159,7 +159,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
             validation = validate_release_outputs(
                 root / "data" / "output",
                 expected_mode="core_major",
-                expected_source_project="crypto-leader-rotation",
+                expected_source_project="crypto-live-pool-pipelines",
                 expected_pool_size=5,
                 reference_date="2026-03-14",
                 max_age_days=45,
@@ -170,7 +170,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
 
         self.assertTrue(validation["ok"])
         self.assertTrue(validation["artifact_manifest_present"])
-        self.assertEqual(validation["artifact_contract_version"], "crypto_leader_rotation.live_pool.v1")
+        self.assertEqual(validation["artifact_contract_version"], "crypto_live_pool_rotation.live_pool.v1")
         self.assertEqual(validation["version"], "2026-03-13-core_major")
         self.assertEqual(validation["pool_size"], 5)
         self.assertEqual(validation["age_days"], 1)
@@ -181,7 +181,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
             self.build_outputs(root)
             manifest_path = root / "data" / "output" / "artifact_manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["contract_version"] = "crypto_leader_rotation.live_pool.v0"
+            manifest["contract_version"] = "crypto_live_pool_rotation.live_pool.v0"
             manifest["artifacts"]["live_pool"]["sha256"] = "wrong"
             write_json(manifest_path, manifest)
 
@@ -192,7 +192,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
 
         self.assertFalse(validation["ok"])
         self.assertIn(
-            "artifact_manifest.json contract_version must be crypto_leader_rotation.live_pool.v1",
+            "artifact_manifest.json contract_version must be crypto_live_pool_rotation.live_pool.v1",
             validation["errors"],
         )
         self.assertIn(
@@ -310,12 +310,12 @@ class ReleaseContractValidationTests(unittest.TestCase):
                         (),
                         {
                             "mode": "core_major",
-                            "source_project": "crypto-leader-rotation",
+                            "source_project": "crypto-live-pool-pipelines",
                             "dry_run": False,
                             "gcp_project_id": None,
                             "gcs_bucket": None,
                             "firestore_collection": "strategy",
-                            "firestore_document": "CRYPTO_LEADER_ROTATION_LIVE_POOL",
+                            "firestore_document": "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
                         },
                     )(),
                     root / "data" / "output",

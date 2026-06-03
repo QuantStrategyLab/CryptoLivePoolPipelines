@@ -54,7 +54,7 @@ class ReleaseStatusSummaryTests(unittest.TestCase):
                 "pool_size": 5,
                 "symbols": symbols,
                 "symbol_map": symbol_map,
-                "source_project": "crypto-leader-rotation",
+                "source_project": "crypto-live-pool-pipelines",
             },
         )
         write_json(
@@ -66,7 +66,7 @@ class ReleaseStatusSummaryTests(unittest.TestCase):
                 "pool_size": 5,
                 "symbols": symbol_map,
                 "symbol_map": symbol_map,
-                "source_project": "crypto-leader-rotation",
+                "source_project": "crypto-live-pool-pipelines",
             },
         )
         pd.DataFrame(
@@ -92,17 +92,17 @@ class ReleaseStatusSummaryTests(unittest.TestCase):
                 output_dir / "artifact_manifest.json",
                 {
                     "manifest_type": "strategy_artifact",
-                    "contract_version": "crypto_leader_rotation.live_pool.v1",
-                    "strategy_profile": "crypto_leader_rotation",
+                    "contract_version": "crypto_live_pool_rotation.live_pool.v1",
+                    "strategy_profile": "crypto_live_pool_rotation",
                     "artifact_type": "live_pool",
-                    "artifact_name": "crypto_leader_rotation_live_pool",
+                    "artifact_name": "crypto_live_pool_rotation_live_pool",
                     "as_of_date": "2026-03-13",
                     "snapshot_as_of": "2026-03-13",
                     "version": version,
                     "mode": "core_major",
                     "symbol_count": len(symbols),
                     "symbols": symbols,
-                    "source_project": "crypto-leader-rotation",
+                    "source_project": "crypto-live-pool-pipelines",
                     "generated_at": "2026-03-13T00:00:00+00:00",
                     "primary_artifact": "live_pool",
                     "artifacts": {
@@ -135,11 +135,11 @@ class ReleaseStatusSummaryTests(unittest.TestCase):
                     "dry_run": True,
                     "publish_enabled": False,
                     "as_of_date": "2026-03-13",
-                    "release_prefix": f"crypto-leader-rotation/releases/{version}",
-                    "current_prefix": "crypto-leader-rotation/current",
+                    "release_prefix": f"crypto-live-pool-pipelines/releases/{version}",
+                    "current_prefix": "crypto-live-pool-pipelines/current",
                     "firestore": {
                         "collection": "strategy",
-                        "document": "CRYPTO_LEADER_ROTATION_LIVE_POOL",
+                        "document": "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
                         "payload": {
                             "as_of_date": "2026-03-13",
                             "version": version,
@@ -147,7 +147,7 @@ class ReleaseStatusSummaryTests(unittest.TestCase):
                             "pool_size": 5,
                             "symbols": symbols,
                             "symbol_map": symbol_map,
-                            "source_project": "crypto-leader-rotation",
+                            "source_project": "crypto-live-pool-pipelines",
                         },
                     },
                 },
@@ -172,7 +172,7 @@ class ReleaseStatusSummaryTests(unittest.TestCase):
         self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["official_release"]["version"], "2026-03-13-core_major")
         self.assertEqual(payload["artifact_summary"]["latest_universe_symbol_count"], 6)
-        self.assertEqual(payload["artifact_summary"]["artifact_contract_version"], "crypto_leader_rotation.live_pool.v1")
+        self.assertEqual(payload["artifact_summary"]["artifact_contract_version"], "crypto_live_pool_rotation.live_pool.v1")
         self.assertEqual(len(payload["artifact_summary"]["ranking_preview"]), 3)
         self.assertTrue(payload["validation"]["ok"])
 

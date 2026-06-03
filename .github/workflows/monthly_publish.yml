@@ -24,7 +24,7 @@ jobs:
       PRODUCTION_PROFILE: binance_only_core_major_monthly
       DOWNLOAD_TOP_LIQUID: ${{ vars.DOWNLOAD_TOP_LIQUID || '90' }}
       FIRESTORE_COLLECTION: ${{ vars.FIRESTORE_COLLECTION || 'strategy' }}
-      FIRESTORE_DOCUMENT: ${{ vars.FIRESTORE_DOCUMENT || 'CRYPTO_LEADER_ROTATION_LIVE_POOL' }}
+      FIRESTORE_DOCUMENT: ${{ vars.FIRESTORE_DOCUMENT || 'CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL' }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCS_BUCKET: ${{ vars.GCS_BUCKET }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -121,7 +121,7 @@ jobs:
               "Authorization": f"Bearer {token}",
               "Accept": "application/vnd.github+json",
               "X-GitHub-Api-Version": "2022-11-28",
-              "User-Agent": "crypto-leader-rotation-monthly-publish",
+              "User-Agent": "crypto-live-pool-pipelines-monthly-publish",
           }
           api_base = f"https://api.github.com/repos/{repository}"
           label_name = "monthly-review"
@@ -235,7 +235,7 @@ jobs:
                       "Accept": "application/vnd.github+json",
                       "Content-Type": "application/json",
                       "X-GitHub-Api-Version": "2022-11-28",
-                      "User-Agent": "crypto-leader-rotation-monthly-publish",
+                      "User-Agent": "crypto-live-pool-pipelines-monthly-publish",
                   },
               )
               with urllib.request.urlopen(request) as response:

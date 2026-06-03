@@ -15,7 +15,7 @@ from src.utils import get_logger
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the full crypto leader rotation research pipeline.")
+    parser = argparse.ArgumentParser(description="Run the full crypto live pool rotation research pipeline.")
     parser.add_argument("--config", default="config/default.yaml", help="Path to the YAML config file.")
     parser.add_argument("--universe-mode", default=None, help="Optional universe mode override, e.g. broad_liquid.")
     return parser.parse_args()

@@ -36,7 +36,7 @@ def build_shadow_release_history(
     source_project = str(
         config.get("publish", {}).get("source_project")
         or config.get("project", {}).get("name")
-        or "crypto-leader-rotation"
+        or "crypto-live-pool-pipelines"
     )
     pool_size = int(config["export"]["live_pool_size"])
 
