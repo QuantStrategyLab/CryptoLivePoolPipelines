@@ -13,6 +13,55 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
+DEFAULT_NOTIFY_LANG = "en"
+SUPPORTED_NOTIFY_LANGS = {"en", "zh"}
+
+_TEXTS = {
+    "en": {
+        "title": "CryptoLivePoolPipelines monthly release",
+        "status": "status",
+        "status_ok": "ok",
+        "status_warning": "warning",
+        "as_of_date": "as_of_date",
+        "official": "official",
+        "shadow": "shadow",
+        "shadow_not_generated": "not_generated_in_this_run",
+        "manifest": "manifest",
+        "present": "present",
+        "missing": "missing",
+        "validation": "validation",
+        "warnings": "warnings",
+        "none": "none",
+    },
+    "zh": {
+        "title": "CryptoLivePoolPipelines 月度发布",
+        "status": "状态",
+        "status_ok": "正常",
+        "status_warning": "警告",
+        "as_of_date": "日期",
+        "official": "官方池",
+        "shadow": "影子池",
+        "shadow_not_generated": "本轮未生成",
+        "manifest": "发布清单",
+        "present": "已存在",
+        "missing": "缺失",
+        "validation": "校验",
+        "warnings": "告警",
+        "none": "无",
+    },
+}
+
+
+def get_notify_lang(value: str | None = None) -> str:
+    raw = str(value if value is not None else os.getenv("NOTIFY_LANG", DEFAULT_NOTIFY_LANG)).strip().lower()
+    if raw in SUPPORTED_NOTIFY_LANGS:
+        return raw
+    return DEFAULT_NOTIFY_LANG
+
+
+def text(lang: str, key: str) -> str:
+    active_lang = lang if lang in SUPPORTED_NOTIFY_LANGS else DEFAULT_NOTIFY_LANG
+    return _TEXTS.get(active_lang, _TEXTS[DEFAULT_NOTIFY_LANG]).get(key, _TEXTS[DEFAULT_NOTIFY_LANG].get(key, key))
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,6 +82,11 @@ def parse_args() -> argparse.Namespace:
         "--output-path",
         default="",
         help="Optional path to write the rendered message for bundle packaging.",
+    )
+    parser.add_argument(
+        "--lang",
+        default="",
+        help="Notification language override. Supported values: en, zh. Defaults to NOTIFY_LANG or en.",
     )
     return parser.parse_args()
 
@@ -146,42 +200,44 @@ def build_health_payload(output_dir: Path | str) -> dict[str, Any]:
     }
 
 
-def format_message(payload: dict[str, Any]) -> str:
+def format_message(payload: dict[str, Any], *, lang: str | None = None) -> str:
+    active_lang = get_notify_lang(lang)
     official = payload["official_baseline"]
     manifest = payload["manifest"]
     validation = payload["validation"]
     shadow = payload["shadow_tracks"]
     shadow_line = (
-        "shadow: "
+        f"{text(active_lang, 'shadow')}: "
         f"official_baseline last={shadow['official_baseline']['last_as_of_date']} "
         f"releases={shadow['official_baseline']['release_count']}; "
         f"challenger_topk_60 last={shadow['challenger_topk_60']['last_as_of_date']} "
         f"releases={shadow['challenger_topk_60']['release_count']}"
         if shadow["official_baseline"]["available"] or shadow["challenger_topk_60"]["available"]
-        else "shadow: not_generated_in_this_run"
+        else f"{text(active_lang, 'shadow')}: {text(active_lang, 'shadow_not_generated')}"
     )
+    status_key = "status_ok" if payload["status"] == "ok" else "status_warning"
     lines = [
-        "CryptoLivePoolPipelines monthly release",
-        f"status: {payload['status']}",
-        f"as_of_date: {payload['as_of_date']}",
+        text(active_lang, "title"),
+        f"{text(active_lang, 'status')}: {text(active_lang, status_key)}",
+        f"{text(active_lang, 'as_of_date')}: {payload['as_of_date']}",
         (
-            "official: "
+            f"{text(active_lang, 'official')}: "
             f"profile={official['profile']} "
             f"version={official['version']} "
             f"mode={official['mode']} "
             f"pool_size={official['pool_size']}"
         ),
         shadow_line,
-        f"manifest: {'present' if manifest['present'] else 'missing'} dry_run={manifest['dry_run']}",
+        f"{text(active_lang, 'manifest')}: {text(active_lang, 'present') if manifest['present'] else text(active_lang, 'missing')} dry_run={manifest['dry_run']}",
     ]
     if validation["ok"] is not None:
         lines.append(
-            f"validation: ok={validation['ok']} manifest_present={validation['manifest_present']} age_days={validation['age_days']}"
+            f"{text(active_lang, 'validation')}: ok={validation['ok']} manifest_present={validation['manifest_present']} age_days={validation['age_days']}"
         )
     if payload["warnings"]:
-        lines.append("warnings: " + " | ".join(payload["warnings"][:4]))
+        lines.append(f"{text(active_lang, 'warnings')}: " + " | ".join(payload["warnings"][:4]))
     else:
-        lines.append("warnings: none")
+        lines.append(f"{text(active_lang, 'warnings')}: {text(active_lang, 'none')}")
     return "\n".join(lines)
 
 
@@ -201,7 +257,7 @@ def send_telegram_message(token: str, chat_id: str, message: str) -> None:
 def main() -> None:
     args = parse_args()
     payload = build_health_payload(args.output_dir)
-    message = format_message(payload)
+    message = format_message(payload, lang=getattr(args, "lang", ""))
     print(message)
     if args.output_path:
         output_path = Path(args.output_path)

@@ -22,6 +22,7 @@ jobs:
       PUBLISH_MODE: ${{ vars.PUBLISH_MODE || 'core_major' }}
       RELEASE_CHANNEL: production
       PRODUCTION_PROFILE: binance_only_core_major_monthly
+      NOTIFY_LANG: ${{ vars.NOTIFY_LANG || 'en' }}
       DOWNLOAD_TOP_LIQUID: ${{ vars.DOWNLOAD_TOP_LIQUID || '90' }}
       FIRESTORE_COLLECTION: ${{ vars.FIRESTORE_COLLECTION || 'strategy' }}
       FIRESTORE_DOCUMENT: ${{ vars.FIRESTORE_DOCUMENT || 'CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL' }}
