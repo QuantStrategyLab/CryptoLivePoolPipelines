@@ -110,6 +110,18 @@ class MonthlyBuildTelegramTests(unittest.TestCase):
         self.assertFalse(payload["shadow_tracks"]["official_baseline"]["available"])
         self.assertIn("shadow: not_generated_in_this_run", message)
 
+    def test_format_message_uses_chinese_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.write_fixture_files(root)
+            payload = MODULE.build_health_payload(root / "data" / "output")
+            message = MODULE.format_message(payload, lang="zh")
+
+        self.assertIn("CryptoLivePoolPipelines 月度发布", message)
+        self.assertIn("状态: 正常", message)
+        self.assertIn("官方池:", message)
+        self.assertIn("告警: 无", message)
+
     def test_main_uses_global_telegram_chat_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
