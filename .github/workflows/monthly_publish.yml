@@ -13,10 +13,10 @@ jobs:
   monthly-publish:
     if: github.ref_name != 'logs'
     runs-on:
-    timeout-minutes: 60
       - self-hosted
       - Linux
       - X64
+    timeout-minutes: 60
     permissions:
       actions: write
       contents: write
