@@ -32,7 +32,7 @@ Live-pool artifact 的作用是让策略判断可复现：包括 ranking 输入�
 
 ## 月度 review 自动化
 
-月度 publish workflow 通过 `CodexAuditBridge` 触发自动 review 和 remediation；`SELFHOSTED_CODEX_REVIEW_PROVIDER` 默认走 `auto`，优先使用 self-hosted Codex 路径，再按桥接仓库配置 fallback 到 API reviewer。`OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY` 等 provider secret 配置在 `CodexAuditBridge`，本仓库不直接读取这些 provider key。
+月度 publish workflow 通过 `CodexAuditBridge` 触发自动 review 和 remediation；`CODEX_AUDIT_PROVIDER` 默认走 `auto`，优先调用 CodexAuditBridge 的 HTTPS/443 service-backed Codex 路径，再按桥接仓库配置 fallback 到 API reviewer。`OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY` 等 provider secret 配置在 `CodexAuditBridge`，本仓库不直接读取这些 provider key。可通过 `CODEX_AUDIT_BRIDGE_REF` pin 到指定 bridge ref，默认 `main`。
 
 生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；旧的本仓库本地 API review workflow 已移除，provider 选择和 fallback 逻辑集中在 `CodexAuditBridge`。
 
