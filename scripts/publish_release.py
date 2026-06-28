@@ -23,8 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mode", default=None, help="Release mode, e.g. core_major.")
     parser.add_argument("--dry-run", action="store_true", help="Build publish payloads without writing to GCS or Firestore.")
     parser.add_argument("--mock", action="store_true", help="Alias of --dry-run for local smoke validation.")
-    parser.add_argument("--gcp-project-id", default=None, help="Optional explicit GCP project override.")
-    parser.add_argument("--gcs-bucket", default=None, help="Optional explicit GCS bucket override.")
+    parser.add_argument("--project-id", default=None, help="Optional explicit cloud project override.")
+    parser.add_argument("--cloud-bucket", default=None, help="Optional explicit cloud bucket override.")
+    # Backward-compat aliases
+    parser.add_argument("--gcp-project-id", default=None, dest="project_id", help=argparse.SUPPRESS)
+    parser.add_argument("--gcs-bucket", default=None, dest="cloud_bucket", help=argparse.SUPPRESS)
     parser.add_argument("--firestore-collection", default=None, help="Optional Firestore collection override.")
     parser.add_argument("--firestore-document", default=None, help="Optional Firestore document override.")
     parser.add_argument(

@@ -19,6 +19,10 @@ REQUIRED_OUTPUT_FILES = (
     "artifact_manifest.json",
 )
 
+OPTIONAL_OUTPUT_FILES = (
+    "btc_cycle_indicators.json",
+)
+
 
 @dataclass(frozen=True)
 class PublishSettings:
@@ -87,9 +91,9 @@ def resolve_publish_settings(
         enabled=enabled,
         dry_run=effective_dry_run,
         mode=str(effective_mode),
-        project_id=project_id or os.getenv("CLOUD_PROJECT_ID") or os.getenv("GCP_PROJECT_ID") or publish_cfg.get("project_id"),
-        cloud_bucket=cloud_bucket or os.getenv("CLOUD_BUCKET") or os.getenv("GCS_BUCKET") or publish_cfg.get("cloud_bucket"),
-        cloud_root_prefix=str(publish_cfg.get("cloud_root_prefix", "crypto-live-pool-pipelines")).strip("/"),
+        project_id=project_id or os.getenv("CLOUD_PROJECT_ID") or os.getenv("GCP_PROJECT_ID") or publish_cfg.get("project_id") or publish_cfg.get("gcp_project_id"),
+        cloud_bucket=cloud_bucket or os.getenv("CLOUD_BUCKET") or os.getenv("GCS_BUCKET") or publish_cfg.get("cloud_bucket") or publish_cfg.get("gcs_bucket"),
+        cloud_root_prefix=str(publish_cfg.get("cloud_root_prefix") or publish_cfg.get("gcs_root_prefix", "crypto-live-pool-pipelines")).strip("/"),
         firestore_collection=(
             firestore_collection
             or os.getenv("FIRESTORE_COLLECTION")
@@ -319,6 +323,11 @@ def upload_release_artifacts(
         "live_pool_legacy.json": artifacts.live_pool_legacy_path,
         "artifact_manifest.json": artifacts.artifact_manifest_path,
     }
+    # Include optional files if present
+    for opt_file in OPTIONAL_OUTPUT_FILES:
+        opt_path = artifacts.output_dir / opt_file
+        if opt_path.exists():
+            files[opt_file] = opt_path
     for filename, local_path in files.items():
         object_info = storage_layout["objects"][filename]
         store.write_bytes(object_info["release_uri"], local_path.read_bytes())

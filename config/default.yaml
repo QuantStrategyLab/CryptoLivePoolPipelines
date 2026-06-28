@@ -267,9 +267,9 @@ live_build:
 publish:
   enabled: false
   mode: "core_major"
-  gcp_project_id: null
-  gcs_bucket: null
-  gcs_root_prefix: "crypto-live-pool-pipelines"
+  project_id: null
+  cloud_bucket: null
+  cloud_root_prefix: "crypto-live-pool-pipelines"
   firestore_collection: "strategy"
   firestore_document: "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL"
   source_project: "crypto-live-pool-pipelines"

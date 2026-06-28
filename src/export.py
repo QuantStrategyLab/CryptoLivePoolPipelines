@@ -224,6 +224,20 @@ def build_strategy_artifact_manifest(
     }
 
 
+def export_btc_cycle_indicators(
+    btc_indicators: dict[str, Any],
+    output_dir: str | Any,
+) -> dict[str, Any]:
+    """Export BTC cycle indicators for consumption by crypto DCA strategies.
+
+    Produces btc_cycle_indicators.json with AHR999, Mayer Multiple,
+    MVRV Z-Score proxy, and related metrics. Compatible with the
+    derived_indicators contract expected by crypto_btc_dca.
+    """
+    write_json(output_dir / "btc_cycle_indicators.json", btc_indicators)
+    return btc_indicators
+
+
 def export_strategy_artifact_manifest(
     *,
     output_dir: str | Any,

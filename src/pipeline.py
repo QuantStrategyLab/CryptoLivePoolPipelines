@@ -9,11 +9,13 @@ from .backtest import run_backtest_suite, run_walkforward_scoring
 from .evaluation import evaluate_leader_selection, leader_metrics_to_frame
 from .external_data import load_optional_market_cap_metadata, merge_histories_with_external
 from .export import (
+    export_btc_cycle_indicators,
     export_latest_ranking,
     export_latest_universe,
     export_live_pool,
     export_strategy_artifact_manifest,
 )
+from .indicators import compute_btc_cycle_indicators
 from .features import MODEL_FEATURE_COLUMNS, add_market_context_features, build_feature_panel
 from .labels import build_labels
 from .models import fit_predict_models
@@ -417,6 +419,27 @@ def build_live_pool_outputs(
         live_pool=live_payload,
         source_project=source_project,
     )
+
+    # Compute and export BTC cycle indicators for crypto DCA strategies
+    btc_cycle = {}
+    benchmark_symbol = str(config.get("data", {}).get("benchmark_symbol", "BTCUSDT"))
+    btc_file = Path(config["paths"].raw_dir) / f"{benchmark_symbol}.csv"
+    if btc_file.exists():
+        try:
+            btc_close = pd.read_csv(btc_file, index_col=0, parse_dates=True).squeeze("columns")
+            if isinstance(btc_close, pd.DataFrame):
+                btc_close = btc_close.iloc[:, 0]
+            btc_close = btc_close.sort_index()
+            btc_cycle = compute_btc_cycle_indicators(btc_close, as_of_date=latest_date)
+            export_btc_cycle_indicators(btc_cycle, output_dir)
+            logger.info("BTC cycle indicators exported: AHR999=%.3f Mayer=%.3f",
+                         btc_cycle.get("ahr999", float("nan")),
+                         btc_cycle.get("mayer_multiple", float("nan")))
+        except Exception as exc:
+            logger.warning("BTC cycle indicators unavailable: %s", exc)
+    else:
+        logger.debug("BTC price file not found at %s, skipping cycle indicators", btc_file)
+
     logger.info("Live pool exports saved into %s for %s.", output_dir, latest_date.date())
 
     return {
@@ -424,6 +447,7 @@ def build_live_pool_outputs(
         "metadata": metadata,
         "live_payload": live_payload,
         "artifact_manifest": artifact_manifest,
+        "btc_cycle_indicators": btc_cycle,
         "as_of_date": latest_date,
         "train_start_date": train_start_date,
         "train_end_date": train_end_date,
