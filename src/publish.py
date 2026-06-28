@@ -25,9 +25,9 @@ class PublishSettings:
     enabled: bool
     dry_run: bool
     mode: str
-    gcp_project_id: str | None
-    gcs_bucket: str | None
-    gcs_root_prefix: str
+    project_id: str | None
+    cloud_bucket: str | None
+    cloud_root_prefix: str
     firestore_collection: str
     firestore_document: str
     source_project: str
@@ -68,8 +68,8 @@ def resolve_publish_settings(
     *,
     mode: str | None = None,
     dry_run: bool = False,
-    gcp_project_id: str | None = None,
-    gcs_bucket: str | None = None,
+    project_id: str | None = None,
+    cloud_bucket: str | None = None,
     firestore_collection: str | None = None,
     firestore_document: str | None = None,
 ) -> PublishSettings:
@@ -87,9 +87,9 @@ def resolve_publish_settings(
         enabled=enabled,
         dry_run=effective_dry_run,
         mode=str(effective_mode),
-        gcp_project_id=gcp_project_id or os.getenv("GCP_PROJECT_ID") or publish_cfg.get("gcp_project_id"),
-        gcs_bucket=gcs_bucket or os.getenv("GCS_BUCKET") or publish_cfg.get("gcs_bucket"),
-        gcs_root_prefix=str(publish_cfg.get("gcs_root_prefix", "crypto-live-pool-pipelines")).strip("/"),
+        project_id=project_id or os.getenv("CLOUD_PROJECT_ID") or os.getenv("GCP_PROJECT_ID") or publish_cfg.get("project_id"),
+        cloud_bucket=cloud_bucket or os.getenv("CLOUD_BUCKET") or os.getenv("GCS_BUCKET") or publish_cfg.get("cloud_bucket"),
+        cloud_root_prefix=str(publish_cfg.get("cloud_root_prefix", "crypto-live-pool-pipelines")).strip("/"),
         firestore_collection=(
             firestore_collection
             or os.getenv("FIRESTORE_COLLECTION")
@@ -182,10 +182,10 @@ def ensure_publish_preflight(
     )
     if settings.dry_run:
         return validation
-    if not settings.gcp_project_id:
-        raise ValueError("Publish preflight failed: GCP_PROJECT_ID is required for a real publish.")
-    if not settings.gcs_bucket:
-        raise ValueError("Publish preflight failed: GCS_BUCKET is required for a real publish.")
+    if not settings.project_id:
+        raise ValueError("Publish preflight failed: CLOUD_PROJECT_ID is required for a real publish.")
+    if not settings.cloud_bucket:
+        raise ValueError("Publish preflight failed: CLOUD_BUCKET is required for a real publish.")
     if not str(settings.firestore_collection).strip():
         raise ValueError("Publish preflight failed: Firestore collection must be configured.")
     if not str(settings.firestore_document).strip():
@@ -194,13 +194,13 @@ def ensure_publish_preflight(
 
 
 def build_storage_layout(settings: PublishSettings, artifacts: ReleaseArtifacts) -> dict[str, Any]:
-    if not settings.gcs_bucket:
+    if not settings.cloud_bucket:
         bucket = "<unset-bucket>"
     else:
-        bucket = settings.gcs_bucket
+        bucket = settings.cloud_bucket
 
-    release_prefix = f"{settings.gcs_root_prefix}/releases/{artifacts.version}"
-    current_prefix = f"{settings.gcs_root_prefix}/current"
+    release_prefix = f"{settings.cloud_root_prefix}/releases/{artifacts.version}"
+    current_prefix = f"{settings.cloud_root_prefix}/current"
     filenames = {
         "latest_universe.json": artifacts.latest_universe_path,
         "latest_ranking.csv": artifacts.latest_ranking_path,
@@ -236,7 +236,7 @@ def build_firestore_payload(
 ) -> dict[str, Any]:
     symbol_map = dict(artifacts.live_pool_legacy["symbols"])
     symbols = list(symbol_map.keys())
-    generated_at = pd.Timestamp.utcnow().isoformat()
+    generated_at = pd.Timestamp.now(tz="UTC").isoformat()
     return {
         "as_of_date": artifacts.as_of_date,
         "mode": settings.mode,
@@ -301,18 +301,17 @@ def upload_release_artifacts(
 ) -> None:
     if settings.dry_run:
         return
-    if not settings.gcp_project_id or not settings.gcs_bucket:
-        raise ValueError("GCP_PROJECT_ID and GCS_BUCKET are required for a real publish.")
+    if not settings.project_id or not settings.cloud_bucket:
+        raise ValueError("CLOUD_PROJECT_ID and CLOUD_BUCKET are required for a real publish.")
 
     try:
-        from google.cloud import storage
+        from quant_platform_kit.cloud import get_object_store
     except ModuleNotFoundError as exc:  # pragma: no cover - import guard
         raise ModuleNotFoundError(
-            "google-cloud-storage is required for real publishing. Install requirements.txt first."
+            "quant-platform-kit is required for real publishing. Install requirements.txt first."
         ) from exc
 
-    client = storage.Client(project=settings.gcp_project_id)
-    bucket = client.bucket(settings.gcs_bucket)
+    store = get_object_store()
     files = {
         "latest_universe.json": artifacts.latest_universe_path,
         "latest_ranking.csv": artifacts.latest_ranking_path,
@@ -322,26 +321,25 @@ def upload_release_artifacts(
     }
     for filename, local_path in files.items():
         object_info = storage_layout["objects"][filename]
-        bucket.blob(object_info["release_object"]).upload_from_filename(str(local_path))
+        store.write_bytes(object_info["release_uri"], local_path.read_bytes())
         if settings.upload_current_pointer:
-            bucket.blob(object_info["current_object"]).upload_from_filename(str(local_path))
+            store.write_bytes(object_info["current_uri"], local_path.read_bytes())
 
 
 def publish_firestore_summary(settings: PublishSettings, firestore_payload: dict[str, Any]) -> None:
     if settings.dry_run:
         return
-    if not settings.gcp_project_id:
-        raise ValueError("GCP_PROJECT_ID is required for Firestore publishing.")
+    if not settings.project_id:
+        raise ValueError("CLOUD_PROJECT_ID is required for Firestore publishing.")
 
     try:
-        from google.cloud import firestore
+        from quant_platform_kit.cloud import get_document_store
     except ModuleNotFoundError as exc:  # pragma: no cover - import guard
         raise ModuleNotFoundError(
-            "google-cloud-firestore is required for real publishing. Install requirements.txt first."
+            "quant-platform-kit is required for real publishing. Install requirements.txt first."
         ) from exc
 
-    client = firestore.Client(project=settings.gcp_project_id)
-    client.collection(settings.firestore_collection).document(settings.firestore_document).set(firestore_payload)
+    get_document_store().set(settings.firestore_collection, settings.firestore_document, firestore_payload)
 
 
 def run_release_publish(
@@ -349,8 +347,8 @@ def run_release_publish(
     *,
     mode: str | None = None,
     dry_run: bool = False,
-    gcp_project_id: str | None = None,
-    gcs_bucket: str | None = None,
+    project_id: str | None = None,
+    cloud_bucket: str | None = None,
     firestore_collection: str | None = None,
     firestore_document: str | None = None,
     max_age_days: int | None = 45,
@@ -360,8 +358,8 @@ def run_release_publish(
         config,
         mode=mode,
         dry_run=dry_run,
-        gcp_project_id=gcp_project_id,
-        gcs_bucket=gcs_bucket,
+        project_id=project_id,
+        cloud_bucket=cloud_bucket,
         firestore_collection=firestore_collection,
         firestore_document=firestore_document,
     )

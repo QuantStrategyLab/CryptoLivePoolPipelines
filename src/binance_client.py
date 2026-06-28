@@ -56,7 +56,7 @@ class BinanceSpotClient:
         """Load exchange info from cache if fresh, otherwise fetch from Binance."""
         cache_path = Path(self.paths.cache_dir) / "exchange_info.json"
         cached = read_json(cache_path)
-        now = pd.Timestamp.utcnow()
+        now = pd.Timestamp.now(tz="UTC")
         ttl = pd.Timedelta(hours=self.config.exchange_info_cache_ttl_hours)
         if not force_refresh and cached is not None:
             fetched_at = cached.get("_fetched_at")

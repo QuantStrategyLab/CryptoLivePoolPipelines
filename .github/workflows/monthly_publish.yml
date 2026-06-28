@@ -50,10 +50,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Authenticate To Google Cloud
-        uses: google-github-actions/auth@v3
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          workload_identity_provider: "projects/677468735457/locations/global/workloadIdentityPools/github-actions/providers/github-main"
+          service_account: "codex-gcp-operator@binancequant.iam.gserviceaccount.com"
 
       - name: Install Dependencies
         run: |

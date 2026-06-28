@@ -156,7 +156,7 @@ class CryptoCompareDailyHistoryProvider:
         to_timestamp = (
             int(pd.Timestamp(as_of_date).normalize().timestamp())
             if as_of_date is not None
-            else int(pd.Timestamp.utcnow().normalize().timestamp())
+            else int(pd.Timestamp.now(tz="UTC").normalize().timestamp())
         )
         frames = []
         for batch_number in range(self.max_batches):
@@ -348,7 +348,7 @@ class YahooFinanceChartProvider:
         params = {
             "interval": "1d",
             "period1": 0,
-            "period2": int(pd.Timestamp.utcnow().timestamp()),
+            "period2": int(pd.Timestamp.now(tz="UTC").timestamp()),
             "includeAdjustedClose": "false",
         }
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -614,7 +614,7 @@ def _cache_is_fresh(frame: pd.DataFrame, as_of_date: pd.Timestamp | None, refres
         return True
     if refresh_days <= 0:
         return True
-    freshness_cutoff = pd.Timestamp.utcnow().tz_localize(None).normalize() - pd.Timedelta(days=refresh_days)
+    freshness_cutoff = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize() - pd.Timedelta(days=refresh_days)
     return latest_date >= freshness_cutoff
 
 
