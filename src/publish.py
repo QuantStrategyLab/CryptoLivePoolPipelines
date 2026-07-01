@@ -187,7 +187,7 @@ def ensure_publish_preflight(
     if settings.dry_run:
         return validation
     if not settings.project_id:
-        raise ValueError("Publish preflight failed: CLOUD_PROJECT_ID is required for a real publish.")
+        raise ValueError("Publish preflight failed: CLOUD_PROJECT_ID or GCP_PROJECT_ID is required for a real publish.")
     if not settings.cloud_bucket:
         raise ValueError("Publish preflight failed: CLOUD_BUCKET is required for a real publish.")
     if not str(settings.firestore_collection).strip():
