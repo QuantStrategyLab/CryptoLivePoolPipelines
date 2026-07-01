@@ -7,6 +7,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "monthly_publish.yml"
 README_ZH_PATH = PROJECT_ROOT / "README.zh-CN.md"
+QPK_DEPENDENCY = (
+    "quant-platform-kit @ "
+    "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@d786c1140967f0e96e35599d057f0655e5a9ba25"
+)
 
 
 class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
@@ -19,10 +23,13 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v7", workflow)
         self.assertIn("GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}", workflow)
         self.assertIn("GCS_BUCKET: ${{ vars.GCS_BUCKET }}", workflow)
-        self.assertIn("credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}", workflow)
+        self.assertIn("workload_identity_provider:", workflow)
+        self.assertIn("service_account:", workflow)
         self.assertIn("issues: write", workflow)
         self.assertNotIn("secrets.GCP_PROJECT_ID", workflow)
         self.assertNotIn("secrets.GCS_BUCKET", workflow)
+        self.assertNotIn("credentials_json:", workflow)
+        self.assertNotIn("GCP_SERVICE_ACCOUNT_KEY", workflow)
 
     def test_monthly_review_issue_creation_does_not_require_gh_cli(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
@@ -63,6 +70,13 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertNotIn("/repos/{target_repository}/dispatches", workflow)
         self.assertNotIn("LEGACY_API_REVIEW_ENABLED", workflow)
         self.assertNotIn("/actions/workflows/ai_review.yml/dispatches", workflow)
+
+    def test_real_publish_dependency_is_locked(self) -> None:
+        requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+        requirements_lock = (PROJECT_ROOT / "requirements-lock.txt").read_text(encoding="utf-8")
+
+        self.assertIn(QPK_DEPENDENCY, requirements)
+        self.assertIn(QPK_DEPENDENCY, requirements_lock)
 
     def test_source_local_legacy_ai_workflows_are_removed(self) -> None:
         workflow_dir = PROJECT_ROOT / ".github" / "workflows"

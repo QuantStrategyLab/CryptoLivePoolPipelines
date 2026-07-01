@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -188,4 +189,3 @@ def rolling_beta(asset_returns: pd.Series, benchmark_returns: pd.Series, window:
 
 def rolling_correlation(asset_returns: pd.Series, benchmark_returns: pd.Series, window: int = 60) -> pd.Series:
     return asset_returns.rolling(window, min_periods=window).corr(benchmark_returns)
-

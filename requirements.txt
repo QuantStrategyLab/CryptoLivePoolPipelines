@@ -1,3 +1,4 @@
+quant-platform-kit @ git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@d786c1140967f0e96e35599d057f0655e5a9ba25
 pandas>=3.0.3
 numpy>=2.4.6,<2.5
 requests>=2.34.2
