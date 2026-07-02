@@ -104,7 +104,7 @@ def compile_patterns(policy: dict[str, Any]) -> list[re.Pattern[str]]:
 # ─── static guard ────────────────────────────────────────────────────────────
 
 _SENSITIVE = re.compile(
-    r'(?:api[_\s]?key|secret|password|token|credential|private[_\s]?key)\s*[:=]\s*["\']'
+    r'(?P<field>api[_\s]?key|secret|password|token|credential|private[_\s]?key)\s*[:=]\s*["\']'
     r'(?!\$\{\{|{{|example|placeholder|test|your[-_\s]|xxx|TODO|CHANGEME)[^"\']{12,}["\']',
     re.IGNORECASE,
 )
@@ -129,7 +129,8 @@ def scan_diff(diff_text: str, path_patterns: list[re.Pattern[str]]) -> list[str]
             continue
         m = _SENSITIVE.search(line[1:])
         if m:
-            violations.append(f"**Hardcoded secret** in `{current}`: `{m.group(0)[:100]}`")
+            field = re.sub(r"\s+", "_", m.group("field").strip().lower())
+            violations.append(f"**Hardcoded secret** in `{current}`: `{field}=<redacted>`")
     return list(dict.fromkeys(violations))
 
 
