@@ -31,6 +31,11 @@ jobs:
           python -m pip install -r "$REQ_FILE"
           python -m pip install ruff
 
+      - name: Verify dependencies
+        run: |
+          set -euo pipefail
+          python -m pip check
+
       - name: Run ruff
         run: |
           set -euo pipefail
