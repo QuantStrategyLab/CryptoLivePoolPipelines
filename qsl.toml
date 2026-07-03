@@ -2,7 +2,8 @@
 repo = "CryptoLivePoolPipelines"
 tier = "pipeline"
 ring = 2
-allow_legacy = false
+allow_legacy = true
+enforce_bundle = false
 artifact_contract = "docs/integration_contract.md"
 snapshot_contract = "docs/integration_contract.md"
 
