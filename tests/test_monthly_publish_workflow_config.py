@@ -51,7 +51,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("CROSS_REPO_GITHUB_APP_ID", workflow)
         self.assertIn("CROSS_REPO_GITHUB_APP_PRIVATE_KEY", workflow)
         self.assertIn("actions/create-github-app-token@v3", workflow)
-        self.assertIn("CodexAuditBridge", workflow)
+        self.assertIn("AIAuditBridge", workflow)
         self.assertIn("permission-actions: write", workflow)
         self.assertIn("APP_TOKEN", workflow)
         self.assertIn("Trigger Monthly Review Automation", workflow)
@@ -91,11 +91,11 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
     def test_chinese_readme_matches_current_monthly_review_defaults(self) -> None:
         readme = README_ZH_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("CodexAuditBridge", readme)
+        self.assertIn("AIAuditBridge", readme)
         self.assertIn("CODEX_AUDIT_PROVIDER", readme)
         self.assertIn("OPENAI_API_KEY", readme)
         self.assertIn("ANTHROPIC_API_KEY", readme)
-        self.assertIn("配置在 `CodexAuditBridge`", readme)
+        self.assertIn("配置在 `AIAuditBridge`", readme)
         self.assertIn("必须从 GitHub variable 读取", readme)
         self.assertIn("本仓库不再保留 source-local `ai_review.yml`", readme)
         self.assertNotIn("只配置 `ANTHROPIC_API_KEY`", readme)
