@@ -47,7 +47,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("CODEX_AUDIT_BRIDGE_REPOSITORY", workflow)
         self.assertIn("CODEX_AUDIT_BRIDGE_REF", workflow)
         self.assertIn('"ref": os.environ["CODEX_AUDIT_BRIDGE_REF"]', workflow)
-        self.assertIn("QuantStrategyLab/CodexAuditBridge", workflow)
+        self.assertIn("QuantStrategyLab/AIAuditBridge", workflow)
         self.assertIn("CROSS_REPO_GITHUB_APP_ID", workflow)
         self.assertIn("CROSS_REPO_GITHUB_APP_PRIVATE_KEY", workflow)
         self.assertIn("actions/create-github-app-token@v3", workflow)
