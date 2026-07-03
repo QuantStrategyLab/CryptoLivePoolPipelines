@@ -82,9 +82,9 @@ Boundary rules:
 
 ## Monthly Codex Remediation
 
-The monthly publish workflow creates a `monthly-review` issue, then dispatches `CodexAuditBridge` as the automated review and remediation path. The bridge owns provider selection through `CODEX_AUDIT_PROVIDER`: `auto` is the default and calls the service-backed Codex path first, falls back to the configured API reviewers when Codex service execution fails, and fails loudly when no API fallback key is configured. `codex` disables API fallback; `api` posts a combined API review; `openai` and `anthropic` post a single-provider API review only. Set `CODEX_AUDIT_BRIDGE_REF` to pin the bridge workflow ref; the default is `main`.
+The monthly publish workflow creates a `monthly-review` issue, then dispatches `AIAuditBridge` as the automated review and remediation path. The bridge owns provider selection through `CODEX_AUDIT_PROVIDER`: `auto` is the default and calls the service-backed Codex path first, falls back to the configured API reviewers when Codex service execution fails, and fails loudly when no API fallback key is configured. `codex` disables API fallback; `api` posts a combined API review; `openai` and `anthropic` post a single-provider API review only. Set `CODEX_AUDIT_BRIDGE_REF` to pin the bridge workflow ref; the default is `main`.
 
-If the bridge dispatch fails, the monthly publish workflow fails loudly. Source-local legacy AI review workflows are intentionally removed; provider fallback lives in `CodexAuditBridge`.
+If the bridge dispatch fails, the monthly publish workflow fails loudly. Source-local legacy AI review workflows are intentionally removed; provider fallback lives in `AIAuditBridge`.
 
 ## Standard Monthly Flow
 
