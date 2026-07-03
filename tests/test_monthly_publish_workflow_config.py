@@ -9,7 +9,7 @@ WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "monthly_publish.yml"
 README_ZH_PATH = PROJECT_ROOT / "README.zh-CN.md"
 QPK_DEPENDENCY = (
     "quant-platform-kit @ "
-    "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@d786c1140967f0e96e35599d057f0655e5a9ba25"
+    "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@0063af3b4a974650ea58a7d3f26dd1b94f65d3e8"
 )
 
 
