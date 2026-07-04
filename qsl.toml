@@ -3,6 +3,7 @@ repo = "CryptoLivePoolPipelines"
 tier = "pipeline"
 ring = 2
 allow_legacy = true
+legacy_reason = "requirements.txt and requirements-lock.txt remain for runtime deployment compatibility."
 enforce_bundle = false
 artifact_contract = "docs/integration_contract.md"
 snapshot_contract = "docs/integration_contract.md"
