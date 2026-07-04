@@ -10,4 +10,4 @@ snapshot_contract = "docs/integration_contract.md"
 
 
 [qsl.compat]
-bundle = "2026.07.1"
+bundle = "2026.07.2"
