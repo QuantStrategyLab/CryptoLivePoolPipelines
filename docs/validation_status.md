@@ -1,6 +1,6 @@
 # Validation Status
 
-This document tracks the current frozen production decision and what still remains experimental.
+This document tracks the current frozen production decision and what still remains experimental. Its validation snapshots are evidence about artifact or content health, not a live service health check for AiGateway, and they must not be used as automatic trading or auto-release approval.
 
 ## Frozen Default
 
