@@ -5,6 +5,9 @@ ring = 2
 allow_legacy = true
 legacy_reason = "requirements.txt and requirements-lock.txt remain for runtime deployment compatibility."
 enforce_bundle = false
+owner = "pipeline"
+expires_at = "2026-09-30"
+next_action = "replace runtime requirements compatibility and restore enforce_bundle=true"
 artifact_contract = "docs/integration_contract.md"
 snapshot_contract = "docs/integration_contract.md"
 
