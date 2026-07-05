@@ -61,7 +61,7 @@ Rules:
 
 ## Upstream Reporting Responsibilities
 
-This repository owns the monthly reporting and publish-status summary layer for the upstream release.
+This repository owns the monthly reporting and publish-status summary layer for the upstream release. These summaries are background evidence for artifact or content health, not a proxy for any AiGateway online service health, and they do not authorize automated trading or unconditional publish decisions.
 
 Operator-facing summary entrypoints:
 
