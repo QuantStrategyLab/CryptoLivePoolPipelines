@@ -1,5 +1,14 @@
 # CryptoLivePoolPipelines
 
+
+## QSL 架构角色
+
+- **层级**：`快照/证据流水线`。
+- **职责**：加密 live-pool 与发布流水线。
+- **事实源/归属**：月度 live-pool 成员、排序、验证 artifacts。
+- **消费对象**：市场数据输入、QuantPlatformKit helpers。
+- **禁止事项**：下单或绕过下游 artifact contract 检查。
+
 [English README](README.md)
 
 > 投资有风险。本项目不构成投资建议，仅用于学习、研究和工程审阅。
