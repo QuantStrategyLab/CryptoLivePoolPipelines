@@ -1,5 +1,14 @@
 # CryptoLivePoolPipelines
 
+
+## QSL architecture role
+
+- **Layer**: `pipeline`.
+- **Responsibility**: crypto live-pool and release pipeline.
+- **Owns**: monthly live-pool membership, ordering, validation artifacts.
+- **Consumes**: market data inputs, QuantPlatformKit helpers.
+- **Must not**: place trades or bypass downstream artifact contract checks.
+
 [Chinese README](README.zh-CN.md)
 
 > Investing involves risk. This project does not provide investment advice and is for education, research, and engineering review only.
