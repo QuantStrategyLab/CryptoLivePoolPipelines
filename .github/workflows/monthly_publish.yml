@@ -85,6 +85,13 @@ jobs:
       - name: Write Monthly Telegram Preview
         run: python scripts/run_monthly_build_telegram.py --print-only --output-path data/output/monthly_telegram.txt
 
+      - name: Generate Strategy Metrics
+        run: |
+          set -euo pipefail
+          python scripts/generate_strategy_metrics.py
+        env:
+          STRATEGY_METRICS_REPO: ${{ github.repository }}
+
       - name: Assemble Monthly Report Bundle
         id: monthly-report
         run: |
@@ -96,6 +103,16 @@ jobs:
               payload = json.load(handle)
           print(f"artifact_name={payload['artifact_name']}")
           PY
+
+      - name: Include Strategy Metrics in Report Bundle
+        run: |
+          set -euo pipefail
+          if [ -f data/output/strategy_metrics.json ]; then
+            cp data/output/strategy_metrics.json data/output/monthly_report_bundle/strategy_metrics.json
+            echo "Included strategy_metrics.json in report bundle"
+          else
+            echo "Warning: strategy_metrics.json not found — watcher will skip"
+          fi
 
       - name: Append Monthly Report Job Summary
         run: cat data/output/monthly_report_bundle/job_summary.md >> "$GITHUB_STEP_SUMMARY"
