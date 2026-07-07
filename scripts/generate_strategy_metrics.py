@@ -103,7 +103,7 @@ def generate_strategy_metrics(
     if not isinstance(tracks, list):
         tracks = []
 
-    root_dir = Path(shadow_cfg.get("root_dir", ""))
+    _root_dir = Path(shadow_cfg.get("root_dir", ""))  # noqa: F841
     for track in tracks:
         if not isinstance(track, dict):
             continue
