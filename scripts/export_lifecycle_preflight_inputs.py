@@ -17,6 +17,9 @@ from src.pipeline import run_research_pipeline
 
 PANEL_COLUMNS = ("in_universe", "open", "final_score")
 COMBO_SYMBOLS = ("BTCUSDT", "ETHUSDT")
+MIN_PANEL_DAYS = 730
+MIN_MARKET_DAYS = 900
+MAX_FRESHNESS_DAYS = 3
 
 
 def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, object]:
@@ -32,11 +35,31 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
     lifecycle_panel = frame[["date", "symbol", *PANEL_COLUMNS]].dropna(subset=["date", "open", "final_score"])
     if lifecycle_panel.empty:
         raise ValueError("research panel has no scored lifecycle rows")
+    panel_dates = pd.DatetimeIndex(sorted(lifecycle_panel["date"].unique()))
+    if len(panel_dates) < MIN_PANEL_DAYS:
+        raise ValueError(f"research panel requires at least {MIN_PANEL_DAYS} scored dates")
+    in_universe_counts = lifecycle_panel.loc[lifecycle_panel["in_universe"]].groupby("date")["symbol"].nunique()
+    if in_universe_counts.empty or int(in_universe_counts.min()) < 2:
+        raise ValueError("research panel requires at least two in-universe symbols per scored date")
 
     market_history = frame.loc[frame["symbol"].isin(COMBO_SYMBOLS), ["date", "symbol", "close"]].dropna()
     missing_combo = sorted(set(COMBO_SYMBOLS) - set(market_history["symbol"]))
     if missing_combo:
         raise ValueError(f"research panel is missing combo symbols: {', '.join(missing_combo)}")
+    reference_dates = set(market_history.loc[market_history["symbol"] == "BTCUSDT", "date"])
+    if len(reference_dates) < MIN_MARKET_DAYS:
+        raise ValueError(f"BTC market history requires at least {MIN_MARKET_DAYS} dates")
+    for symbol in COMBO_SYMBOLS:
+        symbol_dates = set(market_history.loc[market_history["symbol"] == symbol, "date"])
+        if (
+            len(symbol_dates & reference_dates) / len(reference_dates) < 0.99
+            or min(symbol_dates) > min(reference_dates)
+            or max(symbol_dates) < max(reference_dates)
+        ):
+            raise ValueError(f"market history has incomplete symbol coverage: {symbol}")
+    latest_date = max(max(reference_dates), panel_dates.max())
+    if pd.Timestamp.now(tz="UTC").tz_localize(None).normalize() - latest_date > pd.Timedelta(days=MAX_FRESHNESS_DAYS):
+        raise ValueError("lifecycle inputs are stale")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     panel_path = output_dir / "research_panel.csv.gz"
@@ -50,8 +73,8 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
         "panel_symbols": sorted(lifecycle_panel["symbol"].unique().tolist()),
         "market_rows": int(len(market_history)),
         "market_symbols": sorted(market_history["symbol"].unique().tolist()),
-        "start_date": lifecycle_panel["date"].min().date().isoformat(),
-        "end_date": lifecycle_panel["date"].max().date().isoformat(),
+        "start_date": panel_dates.min().date().isoformat(),
+        "end_date": panel_dates.max().date().isoformat(),
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest

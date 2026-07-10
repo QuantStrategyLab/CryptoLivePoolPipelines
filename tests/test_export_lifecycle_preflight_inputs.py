@@ -9,7 +9,7 @@ from scripts.export_lifecycle_preflight_inputs import export_lifecycle_inputs
 
 
 def test_export_lifecycle_inputs_writes_real_panel_contract(tmp_path: Path) -> None:
-    dates = pd.date_range("2024-01-01", periods=10, freq="D")
+    dates = pd.date_range(end=pd.Timestamp.now().normalize(), periods=1000, freq="D")
     symbols = ("BTCUSDT", "ETHUSDT", "SOLUSDT")
     index = pd.MultiIndex.from_product([dates, symbols], names=["date", "symbol"])
     panel = pd.DataFrame(index=index)
