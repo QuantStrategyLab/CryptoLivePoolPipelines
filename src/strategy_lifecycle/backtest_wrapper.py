@@ -47,6 +47,14 @@ def load_preflight_panel() -> pd.DataFrame:
     panel["date"] = pd.to_datetime(panel["date"], errors="coerce")
     panel["open"] = pd.to_numeric(panel["open"], errors="coerce")
     panel["final_score"] = pd.to_numeric(panel["final_score"], errors="coerce")
+    universe_values = panel["in_universe"].map(
+        lambda value: value if isinstance(value, bool) else {
+            "true": True, "1": True, "false": False, "0": False,
+        }.get(str(value).strip().lower())
+    )
+    if universe_values.isna().any():
+        raise InsufficientEvidenceError("research_panel.csv.gz contains invalid in_universe values")
+    panel["in_universe"] = universe_values.astype(bool)
     if panel.empty or panel["date"].isna().any() or panel["open"].isna().any():
         raise InsufficientEvidenceError("research_panel.csv.gz contains invalid numeric/date content")
     market_path = root / "market_history.csv.gz"
@@ -68,7 +76,7 @@ def load_preflight_panel() -> pd.DataFrame:
         raise InsufficientEvidenceError("market history does not match manifest counts or symbols")
     if panel["final_score"].notna().sum() == 0:
         raise InsufficientEvidenceError("research_panel.csv.gz has no valid scored rows")
-    in_universe = panel["in_universe"].astype(str).str.lower().isin({"true", "1", "yes"})
+    in_universe = panel["in_universe"]
     if panel.loc[in_universe, "final_score"].isna().any():
         raise InsufficientEvidenceError("research_panel.csv.gz has malformed scores for in-universe rows")
     if (date.today() - panel["date"].dt.normalize().max().date()).days > 3:
