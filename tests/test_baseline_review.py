@@ -29,7 +29,7 @@ class BaselineReviewTests(unittest.TestCase):
         packet = review["decision_packet"]
         self.assertEqual(packet["system_recommendation"], "insufficient_evidence")
         self.assertEqual(packet["evidence_sufficiency"], "insufficient_evidence")
-        self.assertEqual(len(packet["allowed_human_decisions"]), 5)
+        self.assertEqual(packet["allowed_human_decisions"], ["approve_research", "reject_rollback"])
 
 
 if __name__ == "__main__":

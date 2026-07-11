@@ -69,7 +69,7 @@ def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dic
             "version_change": "新增 fail-closed 基线评审与人工决策 packet；未改变 live 参数。",
             "system_recommendation": "insufficient_evidence",
             "technical_evidence_refs": missing,
-            "allowed_human_decisions": ["approve_research", "approve_shadow", "approve_canary", "approve_live", "reject_rollback"],
+            "allowed_human_decisions": ["approve_research", "reject_rollback"],
         },
     }
 
