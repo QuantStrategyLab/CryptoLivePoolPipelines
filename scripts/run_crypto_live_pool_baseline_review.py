@@ -94,7 +94,19 @@ def _usable_csv(path: Path) -> bool:
             reader = csv.reader(handle)
             header = next(reader, None)
             data_row = next(reader, None)
-        return bool(header and data_row and any(cell.strip() for cell in header))
+        if not header or not data_row:
+            return False
+        normalized = {"".join(ch for ch in cell.lower() if ch.isalnum() or ch == "_") for cell in header}
+        metric_columns = {"cagr", "sharpe", "calmar", "maxdrawdown", "max_dd", "annualizedvolatility"}
+        if not normalized.intersection(metric_columns):
+            return False
+        numeric_values = []
+        for value in data_row:
+            try:
+                numeric_values.append(float(value))
+            except (TypeError, ValueError):
+                continue
+        return bool(numeric_values)
     except (OSError, UnicodeError, csv.Error):
         return False
 
