@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,8 +38,8 @@ def _gate(gate_id: str, reason: str, *, status: str = "insufficient_evidence", r
 
 
 def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dict[str, Any]:
-    missing = [str(path) for path in (performance_summary, walkforward_summary) if not path.exists()]
-    reason = "MISSING_REAL_PERFORMANCE_ARTIFACT" if missing else "BASELINE_REVIEW_NOT_YET_FROZEN"
+    missing = [str(path) for path in (performance_summary, walkforward_summary) if not _usable_csv(path)]
+    reason = "MISSING_OR_INVALID_REAL_PERFORMANCE_ARTIFACT" if missing else "BASELINE_REVIEW_NOT_YET_FROZEN"
     gates = [_gate(gate_id, reason) for gate_id in GATE_NAMES]
     return {
         "schema_version": "strategy_review.v1",
@@ -60,6 +61,17 @@ def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dic
             "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
     }
+
+
+def _usable_csv(path: Path) -> bool:
+    if not path.exists() or not path.is_file():
+        return False
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.reader(handle))
+        return len(rows) >= 2 and any(cell.strip() for cell in rows[0])
+    except (OSError, UnicodeError, csv.Error):
+        return False
 
 
 def render_markdown(review: dict[str, Any]) -> str:

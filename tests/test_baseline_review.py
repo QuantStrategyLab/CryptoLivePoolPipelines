@@ -24,7 +24,7 @@ class BaselineReviewTests(unittest.TestCase):
         self.assertEqual(review["decision"], "insufficient_evidence")
         self.assertFalse(review["promotion_allowed"])
         self.assertEqual(len(review["hard_gates"]), 12)
-        self.assertIn("MISSING_REAL_PERFORMANCE_ARTIFACT", review["blocking_reason_codes"])
+        self.assertIn("MISSING_OR_INVALID_REAL_PERFORMANCE_ARTIFACT", review["blocking_reason_codes"])
         self.assertFalse(review["evidence"]["placeholder_metrics"])
 
 
