@@ -47,6 +47,32 @@ class BaselineReviewTests(unittest.TestCase):
         self.assertEqual(packet["evidence_sufficiency"], "insufficient_evidence")
         self.assertEqual(packet["allowed_human_decisions"], ["approve_research", "reject_rollback"])
 
+    def test_performance_requires_final_score_when_strategy_column_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            performance = root / "performance.csv"
+            walkforward = root / "walkforward.csv"
+            performance.write_text("strategy,CAGR\nrule_score,0.2\n", encoding="utf-8")
+            walkforward.write_text(
+                "window_id,test_start,test_end,window_cagr\n0,2025-01-01,2025-03-31,0.1\n",
+                encoding="utf-8",
+            )
+            review = MODULE.build_review(performance_summary=performance, walkforward_summary=walkforward)
+        self.assertEqual(review["blocking_reason_codes"], ["MISSING_OR_INVALID_REAL_PERFORMANCE_ARTIFACT"])
+
+    def test_walkforward_requires_populated_parseable_window_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            performance = root / "performance.csv"
+            walkforward = root / "walkforward.csv"
+            performance.write_text("CAGR,Sharpe\n0.2,1.1\n", encoding="utf-8")
+            walkforward.write_text(
+                "window_id,test_start,test_end,window_cagr\n,,not-a-date,0.1\n",
+                encoding="utf-8",
+            )
+            review = MODULE.build_review(performance_summary=performance, walkforward_summary=walkforward)
+        self.assertEqual(review["blocking_reason_codes"], ["MISSING_OR_INVALID_REAL_PERFORMANCE_ARTIFACT"])
+
 
 if __name__ == "__main__":
     unittest.main()

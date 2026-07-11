@@ -7,6 +7,7 @@ import json
 import os
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -219,6 +220,35 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
             end_date=date(2024, 3, 1),
         )
         self.assertEqual(result.strategy_profile, PROFILE_NAME)
+
+    def test_real_runner_applies_params_and_preserves_metrics(self) -> None:
+        from src.backtest import BacktestResult
+
+        captured: dict[str, object] = {}
+
+        def fake_backtest(panel, score_column, config):
+            captured["config"] = config
+            returns = pd.Series([0.01, -0.02])
+            return BacktestResult(
+                name=score_column,
+                returns=returns,
+                equity_curve=(1 + returns).cumprod(),
+                holdings=pd.DataFrame(),
+                trades=pd.DataFrame(),
+                turnover=pd.Series([0.0, 0.0]),
+                metrics={"CAGR": -0.1, "Max Drawdown": 0.2, "Sharpe": -0.1},
+            )
+
+        with patch("src.strategy_lifecycle.orchestrator_runner.run_single_backtest", side_effect=fake_backtest):
+            result = CryptoLivePoolBacktestRunner(synthetic_days=1600).run(
+                PROFILE_NAME,
+                {"top_n": 1, "fee_bps": 30},
+            )
+
+        self.assertEqual(captured["config"]["strategy"]["top_n"], 1)
+        self.assertEqual(captured["config"]["strategy"]["fee_bps"], 30)
+        self.assertEqual(result.observation_count, 2)
+        self.assertLess(result.calmar_ratio, 0)
         self.assertEqual(result.domain, "crypto")
         self.assertIsNotNone(result.sharpe_ratio)
 

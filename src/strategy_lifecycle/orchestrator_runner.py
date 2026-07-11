@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date, datetime, timezone
 from typing import Any, Mapping
 
@@ -77,7 +78,7 @@ def _metrics_to_qpk_result(
         raise ImportError("quant_platform_kit is required to build BacktestResult")
     cagr = float(metrics.get("CAGR") or 0.0)
     max_drawdown = float(metrics.get("Max Drawdown") or 0.0)
-    calmar = abs(cagr / max_drawdown) if max_drawdown else None
+    calmar = cagr / max_drawdown if max_drawdown else None
     return QpkBacktestResult(
         strategy_profile=strategy_profile,
         domain="crypto",
@@ -126,7 +127,13 @@ class CryptoLivePoolBacktestRunner:
             raise ValueError("No panel rows for requested window")
 
         started = datetime.now(timezone.utc)
-        result = run_single_backtest(sliced, "final_score", DEFAULT_BACKTEST_CONFIG)
+        config = deepcopy(DEFAULT_BACKTEST_CONFIG)
+        strategy_params = params.get("strategy", params)
+        if isinstance(strategy_params, Mapping):
+            for key in config["strategy"]:
+                if key in strategy_params:
+                    config["strategy"][key] = strategy_params[key]
+        result = run_single_backtest(sliced, "final_score", config)
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
         eval_dates = sliced.index.get_level_values("date")
         metrics = dict(result.metrics)
@@ -134,7 +141,7 @@ class CryptoLivePoolBacktestRunner:
         return _metrics_to_qpk_result(
             strategy_profile=strategy_profile,
             params=params,
-            metrics=result.metrics,
+            metrics=metrics,
             start_date=start_date or eval_dates.min().date(),
             end_date=end_date or eval_dates.max().date(),
             run_duration_seconds=elapsed,

@@ -92,31 +92,32 @@ def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dic
     }
 
 
-def _read_csv(path: Path) -> tuple[list[str], list[str]] | None:
+def _read_csv(path: Path) -> tuple[list[str], list[list[str]]] | None:
     if not path.exists() or not path.is_file():
         return None
     try:
         with path.open(newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
-            data_row = next(reader, None)
-        if not header or not data_row:
+            data_rows = list(reader)
+        if not header or not data_rows:
             return None
-        return ["".join(ch for ch in cell.lower() if ch.isalnum() or ch == "_") for cell in header], data_row
+        return ["".join(ch for ch in cell.lower() if ch.isalnum() or ch == "_") for cell in header], data_rows
     except (OSError, UnicodeError, csv.Error):
         return None
 
 
-def _has_numeric_value(header: list[str], row: list[str], candidates: set[str]) -> bool:
-    for index, name in enumerate(header):
-        if name not in candidates or index >= len(row):
-            continue
-        try:
-            value = float(row[index])
-            if math.isfinite(value):
-                return True
-        except (TypeError, ValueError):
-            continue
+def _has_numeric_value(header: list[str], rows: list[list[str]], candidates: set[str]) -> bool:
+    for row in rows:
+        for index, name in enumerate(header):
+            if name not in candidates or index >= len(row):
+                continue
+            try:
+                value = float(row[index])
+                if math.isfinite(value):
+                    return True
+            except (TypeError, ValueError):
+                continue
     return False
 
 
@@ -124,19 +125,37 @@ def _usable_performance_csv(path: Path) -> bool:
     parsed = _read_csv(path)
     if parsed is None:
         return False
-    header, row = parsed
+    header, rows = parsed
     metrics = {"cagr", "sharpe", "calmar", "maxdrawdown", "max_dd", "annualizedvolatility"}
-    return bool(set(header).intersection(metrics)) and _has_numeric_value(header, row, metrics)
+    if "strategy" in header:
+        strategy_index = header.index("strategy")
+        if not any(len(row) > strategy_index and row[strategy_index].strip().lower() == "final_score" for row in rows):
+            return False
+    return bool(set(header).intersection(metrics)) and _has_numeric_value(header, rows, metrics)
 
 
 def _usable_walkforward_csv(path: Path) -> bool:
     parsed = _read_csv(path)
     if parsed is None:
         return False
-    header, row = parsed
+    header, rows = parsed
     required = {"window_id", "test_start", "test_end"}
     metrics = {"window_cagr", "window_sharpe", "window_max_drawdown", "h30_precision", "h60_precision", "h90_precision"}
-    return required.issubset(set(header)) and bool(set(header).intersection(metrics)) and _has_numeric_value(header, row, metrics)
+    if not required.issubset(set(header)) or not set(header).intersection(metrics):
+        return False
+    positions = {name: header.index(name) for name in required}
+    for row in rows:
+        try:
+            if any(not row[index].strip() for index in positions.values()):
+                continue
+            int(row[positions["window_id"]])
+            datetime.fromisoformat(row[positions["test_start"]].replace("Z", "+00:00"))
+            datetime.fromisoformat(row[positions["test_end"]].replace("Z", "+00:00"))
+        except (IndexError, TypeError, ValueError):
+            continue
+        if _has_numeric_value(header, [row], metrics):
+            return True
+    return False
 
 
 def render_markdown(review: dict[str, Any]) -> str:

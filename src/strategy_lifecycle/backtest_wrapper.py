@@ -66,7 +66,7 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
     required = {"date", "symbol", "in_universe", "open", "final_score"}
     if not required.issubset(panel.columns):
         raise InsufficientEvidenceError("research_panel.csv.gz missing required columns")
-    panel["date"] = pd.to_datetime(panel["date"], errors="coerce")
+    panel["date"] = pd.to_datetime(panel["date"], errors="coerce").dt.normalize()
     panel["open"] = pd.to_numeric(panel["open"], errors="coerce")
     panel["final_score"] = pd.to_numeric(panel["final_score"], errors="coerce")
     universe_values = panel["in_universe"].map(
@@ -120,7 +120,7 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
     if scored_dates.nunique() < MIN_PANEL_DAYS:
         raise InsufficientEvidenceError("research panel has insufficient scored date coverage")
     in_universe_counts = scored_panel.loc[scored_panel["in_universe"]].groupby("date")["symbol"].nunique()
-    if in_universe_counts.reindex(scored_dates.unique(), fill_value=0).min() < 2:
+    if in_universe_counts.empty or in_universe_counts.reindex(scored_dates.unique(), fill_value=0).min() < 2:
         raise InsufficientEvidenceError("research panel has insufficient in-universe coverage")
     panel_end_date = scored_dates.dt.normalize().max().date() if not scored_dates.empty else panel["date"].dt.normalize().max().date()
     panel_start_date = scored_dates.dt.normalize().min().date() if not scored_dates.empty else panel["date"].dt.normalize().min().date()
