@@ -44,6 +44,18 @@ def _canonical_metric_name(name: Any) -> str:
     }.get(normalized, normalized)
 
 
+def _metric_source_priority(column: Any, metric_name: str) -> tuple[int, str, str]:
+    raw = str(column).strip()
+    normalized = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
+    if raw == metric_name:
+        priority = 0
+    elif normalized == metric_name:
+        priority = 1
+    else:
+        priority = 2
+    return priority, normalized, raw
+
+
 def _safe_float(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
@@ -63,15 +75,13 @@ def _track_metrics(index_table: pd.DataFrame) -> dict[str, Any]:
 
     current: dict[str, float] = {}
     baseline: dict[str, float] = {}
-    source_columns: dict[str, str] = {}
+    columns_by_metric: dict[str, list[Any]] = {}
     for col in numeric_columns:
         metric_name = _canonical_metric_name(col)
-        previous_col = source_columns.get(metric_name)
-        if previous_col is not None:
-            raise ValueError(
-                f"multiple columns map to canonical metric {metric_name!r}: {previous_col!r}, {col!r}"
-            )
-        source_columns[metric_name] = str(col)
+        columns_by_metric.setdefault(metric_name, []).append(col)
+
+    for metric_name, columns in columns_by_metric.items():
+        col = min(columns, key=lambda item: _metric_source_priority(item, metric_name))
         cur = _safe_float(latest.get(col))
         values = index_table[col].map(_safe_float).dropna()
         base = _safe_float(values.abs().mean() if metric_name == "max_dd" else values.mean())
