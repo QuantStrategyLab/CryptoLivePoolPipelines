@@ -39,7 +39,8 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
     if len(panel_dates) < MIN_PANEL_DAYS:
         raise ValueError(f"research panel requires at least {MIN_PANEL_DAYS} scored dates")
     in_universe_counts = lifecycle_panel.loc[lifecycle_panel["in_universe"]].groupby("date")["symbol"].nunique()
-    if in_universe_counts.empty or int(in_universe_counts.min()) < 2:
+    in_universe_counts = in_universe_counts.reindex(panel_dates, fill_value=0)
+    if int(in_universe_counts.min()) < 2:
         raise ValueError("research panel requires at least two in-universe symbols per scored date")
 
     market_history = frame.loc[frame["symbol"].isin(COMBO_SYMBOLS), ["date", "symbol", "close"]].dropna()
@@ -57,9 +58,11 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
             or max(symbol_dates) < max(reference_dates)
         ):
             raise ValueError(f"market history has incomplete symbol coverage: {symbol}")
-    latest_date = max(max(reference_dates), panel_dates.max())
-    if pd.Timestamp.now(tz="UTC").tz_localize(None).normalize() - latest_date > pd.Timedelta(days=MAX_FRESHNESS_DAYS):
-        raise ValueError("lifecycle inputs are stale")
+    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    if today - panel_dates.max() > pd.Timedelta(days=MAX_FRESHNESS_DAYS):
+        raise ValueError("research panel is stale")
+    if today - max(reference_dates) > pd.Timedelta(days=MAX_FRESHNESS_DAYS):
+        raise ValueError("BTC/ETH market history is stale")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     panel_path = output_dir / "research_panel.csv.gz"
