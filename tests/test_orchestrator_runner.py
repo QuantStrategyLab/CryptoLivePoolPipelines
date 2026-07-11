@@ -42,14 +42,11 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            dates = pd.date_range(end=pd.Timestamp.today().normalize(), periods=3, freq="D")
-            pd.DataFrame({
-                "date": dates,
-                "symbol": ["BTCUSDT"] * 3,
-                "in_universe": [True] * 3,
-                "open": [100.0, 101.0, 102.0],
-                "final_score": [0.1, 0.2, 0.3],
-            }).to_csv(root / "research_panel.csv.gz", index=False, compression="gzip")
+            from src.strategy_lifecycle.orchestrator_runner import _synthetic_panel
+            panel = _synthetic_panel(days=150).reset_index()
+            panel["date"] = pd.to_datetime(panel["date"])
+            panel["date"] += pd.Timestamp.today().normalize() - panel["date"].max()
+            panel.to_csv(root / "research_panel.csv.gz", index=False, compression="gzip")
             (root / "manifest.json").write_text(json.dumps({"contract_version": "crypto.lifecycle_preflight.v1", "strategy_profile": "crypto_live_pool_rotation"}), encoding="utf-8")
             old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
             os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
@@ -57,6 +54,9 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
                 runner = build_backtest_runner()
                 self.assertIsNotNone(runner)
                 self.assertEqual(runner._runner, None)
+                result = runner.run(PROFILE_NAME, {})
+                self.assertEqual(result.strategy_profile, PROFILE_NAME)
+                self.assertIsNotNone(runner._runner)
             finally:
                 if old is None:
                     os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
