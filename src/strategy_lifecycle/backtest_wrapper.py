@@ -23,7 +23,7 @@ PREFLIGHT_CONTRACT_VERSION = "crypto.lifecycle_preflight.v1"
 PREFLIGHT_ENV = "CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"
 
 
-def load_preflight_panel() -> pd.DataFrame:
+def load_preflight_panel(expected_end_date: date | None = None) -> pd.DataFrame:
     configured = os.environ.get(PREFLIGHT_ENV) or os.environ.get("PREFLIGHT_BUNDLE_ROOT")
     if not configured:
         raise InsufficientEvidenceError(f"{PREFLIGHT_ENV} is required for no-arg lifecycle registration")
@@ -79,7 +79,11 @@ def load_preflight_panel() -> pd.DataFrame:
     in_universe = panel["in_universe"]
     if panel.loc[in_universe, "final_score"].isna().any():
         raise InsufficientEvidenceError("research_panel.csv.gz has malformed scores for in-universe rows")
-    if (date.today() - panel["date"].dt.normalize().max().date()).days > 3:
+    panel_end_date = panel["date"].dt.normalize().max().date()
+    if expected_end_date is not None and panel_end_date < expected_end_date:
+        raise InsufficientEvidenceError("research panel ends before requested evaluation window")
+    freshness_reference = expected_end_date or date.today()
+    if (freshness_reference - panel_end_date).days > 3:
         raise InsufficientEvidenceError("research panel preflight artifact is stale")
     return panel.set_index(["date", "symbol"]).sort_index()
 
@@ -105,7 +109,7 @@ class CryptoBacktestRunner:
         end_date: date | None = None,
     ) -> BacktestResult:
         if self._panel is None:
-            self._runner = CryptoLivePoolBacktestRunner(panel=load_preflight_panel())
+            self._runner = CryptoLivePoolBacktestRunner(panel=load_preflight_panel(end_date))
         elif self._runner is None:
             self._runner = CryptoLivePoolBacktestRunner(panel=self._panel)
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
