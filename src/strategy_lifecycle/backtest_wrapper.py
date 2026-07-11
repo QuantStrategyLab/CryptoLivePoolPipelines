@@ -37,9 +37,9 @@ def load_preflight_panel() -> pd.DataFrame:
         raise InsufficientEvidenceError(f"invalid lifecycle preflight bundle: {root}") from exc
     if manifest.get("contract_version") != PREFLIGHT_CONTRACT_VERSION:
         raise InsufficientEvidenceError("lifecycle preflight manifest mismatch")
-    if manifest.get("producer") is not None and manifest.get("producer") != "export_lifecycle_preflight_inputs.py":
+    if manifest.get("producer") != "export_lifecycle_preflight_inputs.py":
         raise InsufficientEvidenceError("lifecycle preflight producer mismatch")
-    if manifest.get("strategy_profile") is not None and manifest.get("strategy_profile") != PROFILE_NAME:
+    if manifest.get("strategy_profile") != PROFILE_NAME:
         raise InsufficientEvidenceError("lifecycle preflight strategy_profile mismatch")
     required = {"date", "symbol", "in_universe", "open", "final_score"}
     if not required.issubset(panel.columns):
