@@ -86,7 +86,7 @@ def _track_metrics(index_table: pd.DataFrame) -> dict[str, Any]:
             values = index_table[col].map(_safe_float).astype("float64")
             merged_values = merged_values.combine_first(values)
         values = merged_values.dropna()
-        selected_current = _safe_float(values.iloc[-1]) if not values.empty else None
+        selected_current = _safe_float(merged_values.iloc[-1])
         selected_baseline = _safe_float(values.abs().mean() if metric_name == "max_dd" else values.mean())
         if metric_name == "max_dd" and selected_current is not None:
             selected_current = abs(selected_current)

@@ -141,6 +141,14 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
         self.assertEqual(metrics["current_metrics"]["max_dd"], 0.30)
         self.assertAlmostEqual(metrics["baseline_metrics"]["max_dd"], 0.20)
 
+    def test_track_metrics_does_not_reuse_stale_current_value(self) -> None:
+        table = pd.DataFrame({"Sharpe": [1.0, float("nan")]})
+
+        metrics = MODULE._track_metrics(table)
+
+        self.assertNotIn("sharpe", metrics["current_metrics"])
+        self.assertEqual(metrics["baseline_metrics"]["sharpe"], 1.0)
+
     def test_generate_payload_keeps_incomplete_strategy_indexes_in_performance_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
