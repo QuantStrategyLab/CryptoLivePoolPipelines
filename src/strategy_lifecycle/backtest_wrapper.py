@@ -25,7 +25,7 @@ PREFLIGHT_V2 = "crypto.lifecycle_preflight.v2"
 PREFLIGHT_ENV = "CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"
 
 
-def load_preflight_panel(expected_end_date: date | None = None) -> pd.DataFrame:
+def load_preflight_panel(expected_start_date: date | None = None, expected_end_date: date | None = None) -> pd.DataFrame:
     configured = os.environ.get(PREFLIGHT_ENV) or os.environ.get("PREFLIGHT_BUNDLE_ROOT")
     if not configured:
         raise InsufficientEvidenceError(f"{PREFLIGHT_ENV} is required for no-arg lifecycle registration")
@@ -96,6 +96,9 @@ def load_preflight_panel(expected_end_date: date | None = None) -> pd.DataFrame:
     if panel.loc[in_universe, "final_score"].isna().any():
         raise InsufficientEvidenceError("research_panel.csv.gz has malformed scores for in-universe rows")
     panel_end_date = scored_dates.dt.normalize().max().date() if not scored_dates.empty else panel["date"].dt.normalize().max().date()
+    panel_start_date = scored_dates.dt.normalize().min().date() if not scored_dates.empty else panel["date"].dt.normalize().min().date()
+    if expected_start_date is not None and panel_start_date > expected_start_date:
+        raise InsufficientEvidenceError("research panel starts after requested evaluation window")
     if expected_end_date is not None and panel_end_date < expected_end_date:
         raise InsufficientEvidenceError("research panel ends before requested evaluation window")
     freshness_reference = date.today()
@@ -132,7 +135,7 @@ class CryptoBacktestRunner:
         end_date: date | None = None,
     ) -> BacktestResult:
         if self._panel is None:
-            self._runner = CryptoLivePoolBacktestRunner(panel=load_preflight_panel(end_date))
+            self._runner = CryptoLivePoolBacktestRunner(panel=load_preflight_panel(start_date, end_date))
         elif self._runner is None:
             self._runner = CryptoLivePoolBacktestRunner(panel=self._panel)
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
