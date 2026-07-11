@@ -53,7 +53,7 @@ def load_preflight_panel() -> pd.DataFrame:
     if not market_path.exists():
         raise InsufficientEvidenceError("preflight bundle missing market_history.csv.gz")
     try:
-        market = pd.read_csv(market_path, compression="gzip")
+        market = pd.read_csv(market_path, usecols=["date", "symbol", "close"], compression="gzip")
     except (OSError, UnicodeError, ValueError) as exc:
         raise InsufficientEvidenceError("invalid market_history.csv.gz") from exc
     if not {"date", "symbol", "close"}.issubset(market.columns):
@@ -62,6 +62,10 @@ def load_preflight_panel() -> pd.DataFrame:
     market["close"] = pd.to_numeric(market["close"], errors="coerce")
     if market.empty or market["date"].isna().any() or market["close"].isna().any():
         raise InsufficientEvidenceError("market_history.csv.gz contains invalid content")
+    if manifest.get("panel_rows") != len(panel) or sorted(manifest.get("panel_symbols", [])) != sorted(panel["symbol"].dropna().unique().tolist()):
+        raise InsufficientEvidenceError("research panel does not match manifest counts or symbols")
+    if manifest.get("market_rows") != len(market) or sorted(manifest.get("market_symbols", [])) != sorted(market["symbol"].dropna().unique().tolist()):
+        raise InsufficientEvidenceError("market history does not match manifest counts or symbols")
     if panel["final_score"].notna().sum() == 0:
         raise InsufficientEvidenceError("research_panel.csv.gz has no valid scored rows")
     in_universe = panel["in_universe"].astype(str).str.lower().isin({"true", "1", "yes"})
@@ -92,8 +96,10 @@ class CryptoBacktestRunner:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> BacktestResult:
-        if self._runner is None:
-            self._runner = CryptoLivePoolBacktestRunner(panel=self._panel if self._panel is not None else load_preflight_panel())
+        if self._panel is None:
+            self._runner = CryptoLivePoolBacktestRunner(panel=load_preflight_panel())
+        elif self._runner is None:
+            self._runner = CryptoLivePoolBacktestRunner(panel=self._panel)
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
