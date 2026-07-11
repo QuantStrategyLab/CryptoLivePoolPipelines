@@ -98,7 +98,7 @@ def load_preflight_panel(expected_end_date: date | None = None) -> pd.DataFrame:
     panel_end_date = scored_dates.dt.normalize().max().date() if not scored_dates.empty else panel["date"].dt.normalize().max().date()
     if expected_end_date is not None and panel_end_date < expected_end_date:
         raise InsufficientEvidenceError("research panel ends before requested evaluation window")
-    freshness_reference = expected_end_date or date.today()
+    freshness_reference = date.today()
     if (freshness_reference - panel_end_date).days > 3:
         raise InsufficientEvidenceError("research panel preflight artifact is stale")
     if contract_version == PREFLIGHT_V2:

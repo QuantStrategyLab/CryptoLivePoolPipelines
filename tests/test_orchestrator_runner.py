@@ -22,6 +22,32 @@ from src.strategy_lifecycle.orchestrator_runner import (  # noqa: E402
 
 
 class CryptoOrchestratorRunnerTests(unittest.TestCase):
+    @staticmethod
+    def _write_bundle(root: Path, *, version: str = "v1", days: int = 150, age_days: int = 0, non_finite: bool = False) -> None:
+        from src.strategy_lifecycle.orchestrator_runner import _synthetic_panel
+
+        panel = _synthetic_panel(days=days).reset_index()
+        panel["date"] = pd.to_datetime(panel["date"])
+        panel["date"] += pd.Timestamp.today().normalize() - pd.Timedelta(days=age_days) - panel["date"].max()
+        if non_finite:
+            panel.loc[0, "open"] = float("inf")
+        panel.to_csv(root / "research_panel.csv.gz", index=False, compression="gzip")
+        market = panel[["date", "symbol", "open"]].rename(columns={"open": "close"})
+        market.to_csv(root / "market_history.csv.gz", index=False, compression="gzip")
+        manifest = {"contract_version": f"crypto.lifecycle_preflight.{version}"}
+        if version == "v2":
+            manifest.update({
+                "domain": "crypto", "producer": "export_lifecycle_preflight_inputs.py",
+                "strategy_profile": PROFILE_NAME, "panel_rows": len(panel),
+                "panel_symbols": sorted(panel["symbol"].unique().tolist()),
+                "market_rows": len(market), "market_symbols": sorted(market["symbol"].unique().tolist()),
+                "start_date": panel["date"].min().date().isoformat(),
+                "end_date": panel["date"].max().date().isoformat(),
+                "market_start_date": market["date"].min().date().isoformat(),
+                "market_end_date": market["date"].max().date().isoformat(),
+            })
+        (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
     def test_production_wrapper_requires_real_panel(self) -> None:
         from src.strategy_lifecycle.backtest_wrapper import build_backtest_runner
 
@@ -42,13 +68,7 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            from src.strategy_lifecycle.orchestrator_runner import _synthetic_panel
-            panel = _synthetic_panel(days=150).reset_index()
-            panel["date"] = pd.to_datetime(panel["date"])
-            panel["date"] += pd.Timestamp.today().normalize() - panel["date"].max()
-            panel.to_csv(root / "research_panel.csv.gz", index=False, compression="gzip")
-            panel[["date", "symbol", "open"]].rename(columns={"open": "close"}).to_csv(root / "market_history.csv.gz", index=False, compression="gzip")
-            (root / "manifest.json").write_text(json.dumps({"contract_version": "crypto.lifecycle_preflight.v1"}), encoding="utf-8")
+            self._write_bundle(root)
             old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
             os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
             try:
@@ -63,6 +83,40 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
                     os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
                 else:
                     os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
+
+    def test_v2_manifest_is_strictly_loaded(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import build_backtest_runner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root, version="v2")
+            old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
+            os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
+            try:
+                self.assertEqual(build_backtest_runner().run(PROFILE_NAME, {}).strategy_profile, PROFILE_NAME)
+            finally:
+                if old is None:
+                    os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
+                else:
+                    os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
+
+    def test_unknown_stale_and_non_finite_bundles_fail_closed(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError, build_backtest_runner
+
+        for kwargs in ({"version": "v3"}, {"age_days": 10}, {"non_finite": True}):
+            with self.subTest(kwargs=kwargs), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                self._write_bundle(root, **kwargs)
+                old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
+                os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
+                try:
+                    with self.assertRaises(InsufficientEvidenceError):
+                        build_backtest_runner().run(PROFILE_NAME, {})
+                finally:
+                    if old is None:
+                        os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
+                    else:
+                        os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
 
     def test_supported_profile(self) -> None:
         self.assertIn(PROFILE_NAME, SUPPORTED_PROFILES)

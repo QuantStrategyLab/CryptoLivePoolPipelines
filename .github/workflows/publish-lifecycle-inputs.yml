@@ -70,7 +70,7 @@ jobs:
           result = runner.run(
               "crypto_live_pool_rotation",
               {},
-              end_date=date.fromisoformat(manifest["end_date"]),
+              end_date=None,
           )
           if result.observation_count <= 0:
               raise SystemExit("real lifecycle preflight produced no observations")
