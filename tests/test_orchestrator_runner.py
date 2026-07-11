@@ -30,8 +30,9 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
 
         old = os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
         try:
+            runner = build_backtest_runner()
             with self.assertRaises(InsufficientEvidenceError):
-                build_backtest_runner()
+                runner.run(PROFILE_NAME, {})
         finally:
             if old is not None:
                 os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
@@ -53,7 +54,9 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
             old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
             os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
             try:
-                self.assertIsNotNone(build_backtest_runner())
+                runner = build_backtest_runner()
+                self.assertIsNotNone(runner)
+                self.assertEqual(runner._runner, None)
             finally:
                 if old is None:
                     os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)

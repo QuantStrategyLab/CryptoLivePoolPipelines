@@ -35,8 +35,10 @@ def load_preflight_panel() -> pd.DataFrame:
         panel = pd.read_csv(root / "research_panel.csv.gz", compression="gzip")
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise InsufficientEvidenceError(f"invalid lifecycle preflight bundle: {root}") from exc
-    if manifest.get("contract_version") != PREFLIGHT_CONTRACT_VERSION or manifest.get("strategy_profile") != PROFILE_NAME:
+    if manifest.get("contract_version") != PREFLIGHT_CONTRACT_VERSION:
         raise InsufficientEvidenceError("lifecycle preflight manifest mismatch")
+    if manifest.get("strategy_profile", PROFILE_NAME) != PROFILE_NAME:
+        raise InsufficientEvidenceError("lifecycle preflight strategy_profile mismatch")
     required = {"date", "symbol", "in_universe", "open", "final_score"}
     if not required.issubset(panel.columns):
         raise InsufficientEvidenceError("research_panel.csv.gz missing required columns")
@@ -60,7 +62,8 @@ class CryptoBacktestRunner:
     """
 
     def __init__(self, *, panel: pd.DataFrame | None = None) -> None:
-        self._runner = CryptoLivePoolBacktestRunner(panel=panel if panel is not None else load_preflight_panel())
+        self._panel = panel
+        self._runner: CryptoLivePoolBacktestRunner | None = None
 
     def run(
         self,
@@ -69,6 +72,8 @@ class CryptoBacktestRunner:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> BacktestResult:
+        if self._runner is None:
+            self._runner = CryptoLivePoolBacktestRunner(panel=self._panel if self._panel is not None else load_preflight_panel())
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
