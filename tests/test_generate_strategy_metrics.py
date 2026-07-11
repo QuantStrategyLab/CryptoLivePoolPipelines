@@ -86,7 +86,7 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
         self.assertEqual(snapshot["metrics_kind"], "performance")
         self.assertEqual(set(("sharpe", "cagr", "calmar", "win_rate", "max_dd")), set(snapshot["current_metrics"]))
 
-    def test_generate_payload_keeps_missing_baseline_visible(self) -> None:
+    def test_generate_payload_skips_missing_baseline_without_metrics_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             live_pool = root / "release" / "2026-07-11" / "live_pool.json"
@@ -106,10 +106,35 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
 
             payload = MODULE.generate_strategy_metrics(summary_path)
 
-        self.assertEqual(len(payload["snapshots"]), 1)
-        snapshot = payload["snapshots"][0]
-        self.assertEqual(snapshot["current_metrics"], {})
-        self.assertTrue(snapshot["source"].endswith("release_index.csv"))
+        self.assertEqual(payload["snapshots"], [])
+
+    def test_generate_payload_marks_operational_indexes_explicitly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            release_dir = root / "release" / "2026-07-11"
+            release_dir.mkdir(parents=True)
+            (release_dir.parent / "release_index.csv").write_text(
+                "pool_size,pool_churn\n5,0.2\n6,0.1\n",
+                encoding="utf-8",
+            )
+            summary_path = root / "monthly_shadow_build_summary.json"
+            summary_path.write_text(
+                json.dumps(
+                    {
+                        "official_baseline": {
+                            "profile": "baseline",
+                            "live_pool_path": str(release_dir / "live_pool.json"),
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = MODULE.generate_strategy_metrics(summary_path)
+
+        self.assertEqual(payload["schema_version"], "strategy_operational_metrics.v1")
+        self.assertEqual(payload["metrics_kind"], "operational_quality")
+        self.assertEqual(payload["snapshots"][0]["metrics_kind"], "operational_quality")
 
 
 if __name__ == "__main__":

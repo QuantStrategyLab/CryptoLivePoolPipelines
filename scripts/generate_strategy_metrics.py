@@ -33,6 +33,10 @@ if str(PROJECT_ROOT) not in sys.path:
 DEFAULT_REPO = "QuantStrategyLab/CryptoLivePoolPipelines"
 PERFORMANCE_SCHEMA_VERSION = "strategy_performance.v2"
 METRICS_KIND_PERFORMANCE = "performance"
+OPERATIONAL_SCHEMA_VERSION = "strategy_operational_metrics.v1"
+METRICS_KIND_OPERATIONAL = "operational_quality"
+METRICS_BUNDLE_SCHEMA_VERSION = "strategy_metrics_bundle.v1"
+REQUIRED_PERFORMANCE_METRICS = frozenset({"sharpe", "cagr", "calmar", "win_rate", "max_dd"})
 
 
 def _canonical_metric_name(name: Any) -> str:
@@ -104,14 +108,19 @@ def _snapshot_payload(
     source: str,
     generated_at: str,
 ) -> dict[str, Any]:
+    current_metrics = metrics["current_metrics"]
+    baseline_metrics = metrics["baseline_metrics"]
+    is_performance = REQUIRED_PERFORMANCE_METRICS.issubset(current_metrics) and REQUIRED_PERFORMANCE_METRICS.issubset(
+        baseline_metrics
+    )
     return {
         "repo": repo,
         "strategy_profile": profile,
         "plugin": plugin,
-        "schema_version": PERFORMANCE_SCHEMA_VERSION,
-        "metrics_kind": METRICS_KIND_PERFORMANCE,
-        "current_metrics": metrics["current_metrics"],
-        "baseline_metrics": metrics["baseline_metrics"],
+        "schema_version": PERFORMANCE_SCHEMA_VERSION if is_performance else OPERATIONAL_SCHEMA_VERSION,
+        "metrics_kind": METRICS_KIND_PERFORMANCE if is_performance else METRICS_KIND_OPERATIONAL,
+        "current_metrics": current_metrics,
+        "baseline_metrics": baseline_metrics,
         "source": source,
         "generated_at": generated_at,
     }
@@ -140,18 +149,15 @@ def generate_strategy_metrics(
     if baseline_live_pool:
         baseline_dir = Path(baseline_live_pool).parent.parent  # .../version/live_pool.json → parent dir
         baseline_index = baseline_dir / "release_index.csv"
-        metrics = _track_metrics(pd.read_csv(baseline_index)) if baseline_index.exists() else {
-            "current_metrics": {},
-            "baseline_metrics": {},
-        }
-        snapshots.append(_snapshot_payload(
-            repo=repo,
-            profile=baseline_profile,
-            plugin="",
-            metrics=metrics,
-            source=str(baseline_index),
-            generated_at=generated_at,
-        ))
+        if baseline_index.exists():
+            snapshots.append(_snapshot_payload(
+                repo=repo,
+                profile=baseline_profile,
+                plugin="",
+                metrics=_track_metrics(pd.read_csv(baseline_index)),
+                source=str(baseline_index),
+                generated_at=generated_at,
+            ))
 
     # ── shadow candidate tracks ─────────────────────────────────────
     shadow_cfg = summary.get("shadow_candidate_tracks", {})
@@ -195,10 +201,15 @@ def generate_strategy_metrics(
             generated_at=generated_at,
         ))
 
+    contracts = {(snapshot["schema_version"], snapshot["metrics_kind"]) for snapshot in snapshots}
+    if len(contracts) == 1:
+        schema_version, metrics_kind = next(iter(contracts))
+    else:
+        schema_version, metrics_kind = METRICS_BUNDLE_SCHEMA_VERSION, "mixed"
     payload: dict[str, Any] = {
         "repo": repo,
-        "schema_version": PERFORMANCE_SCHEMA_VERSION,
-        "metrics_kind": METRICS_KIND_PERFORMANCE,
+        "schema_version": schema_version,
+        "metrics_kind": metrics_kind,
         "generated_at": generated_at,
         "source": "monthly_shadow_build",
         "snapshots": snapshots,
