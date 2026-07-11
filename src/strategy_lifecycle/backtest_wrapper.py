@@ -12,10 +12,6 @@ from quant_platform_kit.strategy_lifecycle.contracts import BacktestResult
 from .orchestrator_runner import CryptoLivePoolBacktestRunner
 
 
-class InsufficientEvidenceError(RuntimeError):
-    """Raised when a real market panel was not provided for a backtest."""
-
-
 class CryptoBacktestRunner:
     """Expose the real crypto backtest engine through the lifecycle contract.
 
@@ -36,7 +32,13 @@ class CryptoBacktestRunner:
         end_date: date | None = None,
     ) -> BacktestResult:
         if self._runner is None:
-            raise InsufficientEvidenceError("CryptoBacktestRunner requires a real prepared market panel")
+            return BacktestResult(
+                strategy_profile=strategy_profile,
+                domain="crypto",
+                param_set_id="unavailable_real_data",
+                params=dict(params),
+                source_script="CryptoLivePoolPipelines.strategy_lifecycle.backtest_wrapper",
+            )
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
