@@ -63,6 +63,21 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
             if old is not None:
                 os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
 
+    def test_no_arg_factory_ignores_legacy_preflight_env(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError, build_backtest_runner
+
+        old = os.environ.get("PREFLIGHT_BUNDLE_ROOT")
+        os.environ["PREFLIGHT_BUNDLE_ROOT"] = "/tmp/unrelated-preflight-bundle"
+        os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
+        try:
+            with self.assertRaises(InsufficientEvidenceError):
+                build_backtest_runner().run(PROFILE_NAME, {})
+        finally:
+            if old is None:
+                os.environ.pop("PREFLIGHT_BUNDLE_ROOT", None)
+            else:
+                os.environ["PREFLIGHT_BUNDLE_ROOT"] = old
+
     def test_no_arg_factory_loads_valid_preflight_bundle(self) -> None:
         from src.strategy_lifecycle.backtest_wrapper import build_backtest_runner
 

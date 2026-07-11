@@ -26,7 +26,7 @@ PREFLIGHT_ENV = "CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"
 
 
 def load_preflight_panel(expected_start_date: date | None = None, expected_end_date: date | None = None) -> pd.DataFrame:
-    configured = os.environ.get(PREFLIGHT_ENV) or os.environ.get("PREFLIGHT_BUNDLE_ROOT")
+    configured = os.environ.get(PREFLIGHT_ENV)
     if not configured:
         raise InsufficientEvidenceError(f"{PREFLIGHT_ENV} is required for no-arg lifecycle registration")
     root = Path(configured).expanduser().resolve()
