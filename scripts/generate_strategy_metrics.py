@@ -70,7 +70,6 @@ def _track_metrics(index_table: pd.DataFrame) -> dict[str, Any]:
     """Extract canonical current and baseline performance metrics."""
     if index_table.empty:
         return {"current_metrics": {}, "baseline_metrics": {}}
-    latest = index_table.iloc[-1]
     numeric_columns = index_table.select_dtypes(include=["number"]).columns.tolist()
 
     current: dict[str, float] = {}
