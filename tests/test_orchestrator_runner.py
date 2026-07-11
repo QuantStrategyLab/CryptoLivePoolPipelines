@@ -84,6 +84,20 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
                 else:
                     os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
 
+    def test_v1_bundle_rejects_inconsistent_optional_date_metadata(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError, load_preflight_panel
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root)
+            manifest_path = root / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["start_date"] = "2000-01-01"
+            manifest["end_date"] = "2000-01-02"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(InsufficientEvidenceError):
+                load_preflight_panel(root)
+
     def test_v2_manifest_is_strictly_loaded(self) -> None:
         from src.strategy_lifecycle.backtest_wrapper import build_backtest_runner
 

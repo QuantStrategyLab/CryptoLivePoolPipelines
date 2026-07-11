@@ -117,6 +117,17 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
         market_end = market_end_date.isoformat()
         if manifest["market_start_date"] != market_start or manifest["market_end_date"] != market_end:
             raise InsufficientEvidenceError("v2 market date range does not match manifest")
+    else:
+        panel_start = panel_start_date.isoformat()
+        panel_end = panel_end_date.isoformat()
+        if any(key in manifest for key in ("start_date", "end_date")):
+            if manifest.get("start_date") != panel_start or manifest.get("end_date") != panel_end:
+                raise InsufficientEvidenceError("v1 panel date range does not match manifest")
+        market_start = market["date"].dt.normalize().min().date().isoformat()
+        market_end = market_end_date.isoformat()
+        if any(key in manifest for key in ("market_start_date", "market_end_date")):
+            if manifest.get("market_start_date") != market_start or manifest.get("market_end_date") != market_end:
+                raise InsufficientEvidenceError("v1 market date range does not match manifest")
     return panel.set_index(["date", "symbol"]).sort_index()
 
 
