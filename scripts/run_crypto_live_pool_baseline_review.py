@@ -69,6 +69,16 @@ def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dic
             "version_change": "新增 fail-closed 基线评审与人工决策 packet；未改变 live 参数。",
             "system_recommendation": "insufficient_evidence",
             "technical_evidence_refs": missing,
+            "automation_boundary": {
+                "research_auto_after_hard_gates": True,
+                "shadow_auto_after_hard_gates": True,
+                "canary_mode": "bounded_preapproved_only",
+                "canary_limits": {"capital": "preapproved", "duration": "preapproved", "max_drawdown": "preapproved", "max_leverage": "preapproved", "max_concurrency": "preapproved"},
+                "auto_scale_allowed": False,
+                "normal_live_requires_human": True,
+                "funding_leverage_risk_override_requires_human": True,
+                "hard_risk_auto_pause_rollback": True,
+            },
             "allowed_human_decisions": ["approve_research", "reject_rollback"],
         },
     }
