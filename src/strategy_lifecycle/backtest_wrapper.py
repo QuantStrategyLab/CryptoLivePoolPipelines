@@ -9,7 +9,7 @@ import pandas as pd
 
 from quant_platform_kit.strategy_lifecycle.contracts import BacktestResult
 
-from .orchestrator_runner import CryptoLivePoolBacktestRunner, PROFILE_NAME
+from .orchestrator_runner import CryptoLivePoolBacktestRunner
 
 
 class CryptoBacktestRunner:

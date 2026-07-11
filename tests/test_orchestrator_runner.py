@@ -23,7 +23,7 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
 
         runner = CryptoBacktestRunner()
         with self.assertRaisesRegex(ValueError, "real prepared market panel"):
-            runner.run(PROFILE_NAME, {})
+            runner.run("crypto_live_pool_rotation", {})
 
     def test_supported_profile(self) -> None:
         self.assertIn(PROFILE_NAME, SUPPORTED_PROFILES)
