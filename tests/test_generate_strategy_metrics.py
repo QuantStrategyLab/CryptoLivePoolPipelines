@@ -115,10 +115,10 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
     def test_track_metrics_falls_back_to_valid_alias_on_empty_preferred_column(self) -> None:
         table = pd.DataFrame(
             {
-                "max_dd": [float("nan")],
-                "Max Drawdown": [-0.20],
-                "win_rate": [float("nan")],
-                "WinRate": [0.55],
+                "max_dd": [0.10, float("nan")],
+                "Max Drawdown": [-0.20, -0.20],
+                "win_rate": [float("nan"), float("nan")],
+                "WinRate": [0.55, 0.55],
             }
         )
 
@@ -126,6 +126,7 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
 
         self.assertEqual(metrics["current_metrics"]["max_dd"], 0.20)
         self.assertEqual(metrics["current_metrics"]["win_rate"], 0.55)
+        self.assertAlmostEqual(metrics["baseline_metrics"]["max_dd"], 0.20)
 
     def test_generate_payload_keeps_incomplete_strategy_indexes_in_performance_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
