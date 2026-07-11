@@ -16,4 +16,6 @@ def test_publish_lifecycle_inputs_workflow_uses_real_research_pipeline() -> None
     assert "if-no-files-found: error" in workflow
     assert "Inject and verify lifecycle preflight runtime wiring" in workflow
     assert 'echo "CRYPTO_LIFECYCLE_PREFLIGHT_ROOT=${CRYPTO_LIFECYCLE_PREFLIGHT_ROOT}" >> "$GITHUB_ENV"' in workflow
+    assert 'CRYPTO_LIFECYCLE_EXPECTED_END_DATE=${completed_date}' in workflow
+    assert 'end_date=expected_end_date' in workflow
     assert "runner = build_backtest_runner()" in workflow

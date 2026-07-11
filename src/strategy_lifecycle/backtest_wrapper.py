@@ -130,7 +130,10 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
     panel_end_date = scored_dates.dt.normalize().max().date() if not scored_dates.empty else panel["date"].dt.normalize().max().date()
     panel_start_date = scored_dates.dt.normalize().min().date() if not scored_dates.empty else panel["date"].dt.normalize().min().date()
     today = date.today()
+    market_start_date = market["date"].dt.normalize().min().date()
     market_end_date = market["date"].dt.normalize().max().date()
+    if market_start_date > panel_start_date or market_end_date < panel_end_date:
+        raise InsufficientEvidenceError("market history does not cover scored panel date range")
     if panel_end_date > today or market_end_date > today:
         raise InsufficientEvidenceError("preflight bundle contains future-dated data")
     if (today - market_end_date).days > 3:

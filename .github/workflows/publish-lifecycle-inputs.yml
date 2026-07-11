@@ -40,6 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           completed_date="$(python -c 'from datetime import datetime, timedelta, timezone; print((datetime.now(timezone.utc) - timedelta(days=1)).date())')"
+          echo "CRYPTO_LIFECYCLE_EXPECTED_END_DATE=${completed_date}" >> "$GITHUB_ENV"
           python scripts/download_history.py --top-liquid "${DOWNLOAD_TOP_LIQUID}" \
             --end-date "${completed_date}" \
             --force-exchange-info
@@ -67,10 +68,11 @@ jobs:
           with open(os.path.join(os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"], "manifest.json"), encoding="utf-8") as handle:
               manifest = json.load(handle)
           runner = build_backtest_runner()
+          expected_end_date = date.fromisoformat(os.environ["CRYPTO_LIFECYCLE_EXPECTED_END_DATE"])
           result = runner.run(
               "crypto_live_pool_rotation",
               {},
-              end_date=None,
+              end_date=expected_end_date,
           )
           if result.observation_count <= 0:
               raise SystemExit("real lifecycle preflight produced no observations")
