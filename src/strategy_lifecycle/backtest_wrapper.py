@@ -38,6 +38,6 @@ class CryptoBacktestRunner:
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
-def build_backtest_runner(*, panel: pd.DataFrame | None = None) -> CryptoBacktestRunner:
-    """Build a production adapter; callers must supply prepared real data."""
+def build_backtest_runner(*, panel: pd.DataFrame) -> CryptoBacktestRunner:
+    """Build a production adapter from a required prepared real-data panel."""
     return CryptoBacktestRunner(panel=panel)
