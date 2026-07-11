@@ -189,6 +189,24 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
             with self.assertRaises(InsufficientEvidenceError):
                 load_preflight_panel(root)
 
+    def test_stale_market_history_fails_closed(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError, load_preflight_panel
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root, version="v2")
+            market_path = root / "market_history.csv.gz"
+            market = pd.read_csv(market_path, compression="gzip")
+            market["date"] = pd.to_datetime(market["date"]) - pd.Timedelta(days=10)
+            market.to_csv(market_path, index=False, compression="gzip")
+            manifest_path = root / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["market_start_date"] = market["date"].min().date().isoformat()
+            manifest["market_end_date"] = market["date"].max().date().isoformat()
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(InsufficientEvidenceError):
+                load_preflight_panel(root)
+
     def test_supported_profile(self) -> None:
         self.assertIn(PROFILE_NAME, SUPPORTED_PROFILES)
 

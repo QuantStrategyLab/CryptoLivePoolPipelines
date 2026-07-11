@@ -128,6 +128,8 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
     market_end_date = market["date"].dt.normalize().max().date()
     if panel_end_date > today or market_end_date > today:
         raise InsufficientEvidenceError("preflight bundle contains future-dated data")
+    if (today - market_end_date).days > 3:
+        raise InsufficientEvidenceError("market history preflight artifact is stale")
     if expected_start_date is not None and panel_start_date > expected_start_date:
         raise InsufficientEvidenceError("research panel starts after requested evaluation window")
     if expected_end_date is not None and panel_end_date < expected_end_date:
