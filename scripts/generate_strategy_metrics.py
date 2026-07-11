@@ -8,14 +8,17 @@ The watcher (AIAuditBridge service/strategy_optimization_policy.py) checks:
   sharpe, cagr, calmar, win_rate (higher-is-better, relative-drop threshold)
   max_dd (lower-is-better, absolute-worsening threshold)
 
-Metrics that are not yet available (e.g. backtest returns) are omitted — the watcher
-gracefully skips missing metrics without raising false degradation signals.
+The payload uses the versioned performance contract expected by the watcher. Missing
+required metrics remain visible as data-quality findings instead of being treated as
+a healthy strategy.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,35 +31,95 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 DEFAULT_REPO = "QuantStrategyLab/CryptoLivePoolPipelines"
+PERFORMANCE_SCHEMA_VERSION = "strategy_performance.v2"
+METRICS_KIND_PERFORMANCE = "performance"
+
+
+def _canonical_metric_name(name: Any) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", str(name).strip().lower()).strip("_")
+    return {
+        "max_drawdown": "max_dd",
+        "winrate": "win_rate",
+        "annualized_volatility": "volatility",
+    }.get(normalized, normalized)
+
+
+def _metric_source_priority(column: Any, metric_name: str) -> tuple[int, str, str]:
+    raw = str(column).strip()
+    normalized = re.sub(r"[^a-z0-9]+", "_", raw.lower()).strip("_")
+    if raw == metric_name:
+        priority = 0
+    elif normalized == metric_name:
+        priority = 1
+    else:
+        priority = 2
+    return priority, normalized, raw
 
 
 def _safe_float(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _track_metrics(index_table: pd.DataFrame) -> dict[str, Any]:
-    """Extract current (latest period) and baseline (all-time average) metrics."""
+    """Extract canonical current and baseline performance metrics."""
     if index_table.empty:
         return {"current_metrics": {}, "baseline_metrics": {}}
-    latest = index_table.iloc[-1]
     numeric_columns = index_table.select_dtypes(include=["number"]).columns.tolist()
 
     current: dict[str, float] = {}
     baseline: dict[str, float] = {}
+    columns_by_metric: dict[str, list[Any]] = {}
     for col in numeric_columns:
-        cur = _safe_float(latest.get(col))
-        base = _safe_float(index_table[col].mean())
-        if cur is not None:
-            current[col] = cur
-        if base is not None:
-            baseline[col] = base
+        metric_name = _canonical_metric_name(col)
+        columns_by_metric.setdefault(metric_name, []).append(col)
+
+    for metric_name, columns in columns_by_metric.items():
+        ordered_columns = sorted(columns, key=lambda item: _metric_source_priority(item, metric_name))
+        merged_values = pd.Series(float("nan"), index=index_table.index, dtype="float64")
+        for col in ordered_columns:
+            values = index_table[col].map(_safe_float).astype("float64")
+            merged_values = merged_values.combine_first(values)
+        values = merged_values.dropna()
+        selected_current = _safe_float(merged_values.iloc[-1])
+        selected_baseline = _safe_float(values.abs().mean() if metric_name == "max_dd" else values.mean())
+        if metric_name == "max_dd" and selected_current is not None:
+            selected_current = abs(selected_current)
+        if selected_current is not None:
+            current[metric_name] = selected_current
+        if selected_baseline is not None:
+            baseline[metric_name] = selected_baseline
 
     return {"current_metrics": current, "baseline_metrics": baseline}
+
+
+def _snapshot_payload(
+    *,
+    repo: str,
+    profile: str,
+    plugin: str,
+    metrics: dict[str, Any],
+    source: str,
+    generated_at: str,
+) -> dict[str, Any]:
+    current_metrics = metrics["current_metrics"]
+    baseline_metrics = metrics["baseline_metrics"]
+    return {
+        "repo": repo,
+        "strategy_profile": profile,
+        "plugin": plugin,
+        "schema_version": PERFORMANCE_SCHEMA_VERSION,
+        "metrics_kind": METRICS_KIND_PERFORMANCE,
+        "current_metrics": current_metrics,
+        "baseline_metrics": baseline_metrics,
+        "source": source,
+        "generated_at": generated_at,
+    }
 
 
 def generate_strategy_metrics(
@@ -83,19 +146,17 @@ def generate_strategy_metrics(
         baseline_dir = Path(baseline_live_pool).parent.parent  # .../version/live_pool.json → parent dir
         baseline_index = baseline_dir / "release_index.csv"
         if baseline_index.exists():
-            index = pd.read_csv(baseline_index)
-            metrics = _track_metrics(index)
-            snapshots.append(
-                {
-                    "repo": repo,
-                    "strategy_profile": baseline_profile,
-                    "plugin": "",
-                    "current_metrics": metrics["current_metrics"],
-                    "baseline_metrics": metrics["baseline_metrics"],
-                    "source": str(summary_path),
-                    "generated_at": generated_at,
-                }
-            )
+            baseline_metrics = _track_metrics(pd.read_csv(baseline_index))
+        else:
+            baseline_metrics = {"current_metrics": {}, "baseline_metrics": {}}
+        snapshots.append(_snapshot_payload(
+            repo=repo,
+            profile=baseline_profile,
+            plugin="",
+            metrics=baseline_metrics,
+            source=str(baseline_index),
+            generated_at=generated_at,
+        ))
 
     # ── shadow candidate tracks ─────────────────────────────────────
     shadow_cfg = summary.get("shadow_candidate_tracks", {})
@@ -118,35 +179,31 @@ def generate_strategy_metrics(
                 index_path = PROJECT_ROOT / index_path
 
         if index_path is None or not index_path.exists():
-            snapshots.append(
-                {
-                    "repo": repo,
-                    "strategy_profile": profile_name,
-                    "plugin": track_id,
-                    "current_metrics": {},
-                    "baseline_metrics": {},
-                    "source": str(index_path) if index_path else "",
-                    "generated_at": generated_at,
-                }
-            )
+            snapshots.append(_snapshot_payload(
+                repo=repo,
+                profile=profile_name,
+                plugin=track_id,
+                metrics={"current_metrics": {}, "baseline_metrics": {}},
+                source=str(index_path) if index_path else "",
+                generated_at=generated_at,
+            ))
             continue
 
         index = pd.read_csv(index_path)
         metrics = _track_metrics(index)
-        snapshots.append(
-            {
-                "repo": repo,
-                "strategy_profile": profile_name,
-                "plugin": track_id,
-                "current_metrics": metrics["current_metrics"],
-                "baseline_metrics": metrics["baseline_metrics"],
-                "source": str(index_path),
-                "generated_at": generated_at,
-            }
-        )
+        snapshots.append(_snapshot_payload(
+            repo=repo,
+            profile=profile_name,
+            plugin=track_id,
+            metrics=metrics,
+            source=str(index_path),
+            generated_at=generated_at,
+        ))
 
     payload: dict[str, Any] = {
         "repo": repo,
+        "schema_version": PERFORMANCE_SCHEMA_VERSION,
+        "metrics_kind": METRICS_KIND_PERFORMANCE,
         "generated_at": generated_at,
         "source": "monthly_shadow_build",
         "snapshots": snapshots,
