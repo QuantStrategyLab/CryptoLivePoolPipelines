@@ -108,7 +108,7 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
 
         self.assertEqual(payload["snapshots"], [])
 
-    def test_generate_payload_marks_operational_indexes_explicitly(self) -> None:
+    def test_generate_payload_keeps_incomplete_strategy_indexes_in_performance_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             release_dir = root / "release" / "2026-07-11"
@@ -134,7 +134,7 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
 
         self.assertEqual(payload["schema_version"], "strategy_performance.v2")
         self.assertEqual(payload["metrics_kind"], "performance")
-        self.assertEqual(payload["snapshots"][0]["metrics_kind"], "operational_quality")
+        self.assertEqual(payload["snapshots"][0]["metrics_kind"], "performance")
 
     def test_missing_shadow_index_remains_performance_data_quality_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

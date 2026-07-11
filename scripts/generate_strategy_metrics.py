@@ -33,9 +33,6 @@ if str(PROJECT_ROOT) not in sys.path:
 DEFAULT_REPO = "QuantStrategyLab/CryptoLivePoolPipelines"
 PERFORMANCE_SCHEMA_VERSION = "strategy_performance.v2"
 METRICS_KIND_PERFORMANCE = "performance"
-OPERATIONAL_SCHEMA_VERSION = "strategy_operational_metrics.v1"
-METRICS_KIND_OPERATIONAL = "operational_quality"
-REQUIRED_PERFORMANCE_METRICS = frozenset({"sharpe", "cagr", "calmar", "win_rate", "max_dd"})
 
 
 def _canonical_metric_name(name: Any) -> str:
@@ -106,20 +103,15 @@ def _snapshot_payload(
     metrics: dict[str, Any],
     source: str,
     generated_at: str,
-    expected_performance: bool = False,
 ) -> dict[str, Any]:
     current_metrics = metrics["current_metrics"]
     baseline_metrics = metrics["baseline_metrics"]
-    is_performance = expected_performance or (
-        REQUIRED_PERFORMANCE_METRICS.issubset(current_metrics)
-        and REQUIRED_PERFORMANCE_METRICS.issubset(baseline_metrics)
-    )
     return {
         "repo": repo,
         "strategy_profile": profile,
         "plugin": plugin,
-        "schema_version": PERFORMANCE_SCHEMA_VERSION if is_performance else OPERATIONAL_SCHEMA_VERSION,
-        "metrics_kind": METRICS_KIND_PERFORMANCE if is_performance else METRICS_KIND_OPERATIONAL,
+        "schema_version": PERFORMANCE_SCHEMA_VERSION,
+        "metrics_kind": METRICS_KIND_PERFORMANCE,
         "current_metrics": current_metrics,
         "baseline_metrics": baseline_metrics,
         "source": source,
@@ -188,7 +180,6 @@ def generate_strategy_metrics(
                 metrics={"current_metrics": {}, "baseline_metrics": {}},
                 source=str(index_path) if index_path else "",
                 generated_at=generated_at,
-                expected_performance=True,
             ))
             continue
 
