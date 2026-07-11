@@ -47,8 +47,11 @@ def load_preflight_panel() -> pd.DataFrame:
     panel["final_score"] = pd.to_numeric(panel["final_score"], errors="coerce")
     if panel.empty or panel["date"].isna().any() or panel["open"].isna().any():
         raise InsufficientEvidenceError("research_panel.csv.gz contains invalid numeric/date content")
-    if panel["final_score"].notna().sum() == 0 or panel.loc[panel["final_score"].notna(), "final_score"].isna().any():
+    if panel["final_score"].notna().sum() == 0:
         raise InsufficientEvidenceError("research_panel.csv.gz has no valid scored rows")
+    in_universe = panel["in_universe"].astype(str).str.lower().isin({"true", "1", "yes"})
+    if panel.loc[in_universe, "final_score"].isna().any():
+        raise InsufficientEvidenceError("research_panel.csv.gz has malformed scores for in-universe rows")
     if (date.today() - panel["date"].dt.normalize().max().date()).days > 3:
         raise InsufficientEvidenceError("research panel preflight artifact is stale")
     return panel.set_index(["date", "symbol"]).sort_index()
