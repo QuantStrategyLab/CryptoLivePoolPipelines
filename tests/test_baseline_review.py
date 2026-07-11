@@ -26,6 +26,10 @@ class BaselineReviewTests(unittest.TestCase):
         self.assertEqual(len(review["hard_gates"]), 12)
         self.assertIn("MISSING_OR_INVALID_REAL_PERFORMANCE_ARTIFACT", review["blocking_reason_codes"])
         self.assertFalse(review["evidence"]["placeholder_metrics"])
+        packet = review["decision_packet"]
+        self.assertEqual(packet["system_recommendation"], "insufficient_evidence")
+        self.assertEqual(packet["evidence_sufficiency"], "insufficient_evidence")
+        self.assertEqual(len(packet["allowed_human_decisions"]), 5)
 
 
 if __name__ == "__main__":

@@ -60,6 +60,17 @@ def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dic
             "missing_artifacts": missing,
             "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
+        "decision_packet": {
+            "strategy_what": "按评分选择加密资产并进行 live-pool rotation；当前仅评审流程，不执行交易。",
+            "return_source": "真实 performance artifacts 未提供，收益来源无法确认。",
+            "loss_scenarios": "未完成真实回测，主要亏损场景无法确认；不得用 placeholder 指标替代。",
+            "max_risk": "证据不足，最大回撤、容量和流动性风险均不可确认。",
+            "evidence_sufficiency": "insufficient_evidence",
+            "version_change": "新增 fail-closed 基线评审与人工决策 packet；未改变 live 参数。",
+            "system_recommendation": "insufficient_evidence",
+            "technical_evidence_refs": missing,
+            "allowed_human_decisions": ["approve_research", "approve_shadow", "approve_canary", "approve_live", "reject_rollback"],
+        },
     }
 
 
