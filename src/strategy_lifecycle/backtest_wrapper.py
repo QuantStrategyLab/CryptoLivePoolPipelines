@@ -21,8 +21,8 @@ class CryptoBacktestRunner:
     runner used by tests/research fixtures.
     """
 
-    def __init__(self, *, panel: pd.DataFrame | None = None) -> None:
-        self._runner = CryptoLivePoolBacktestRunner(panel=panel) if panel is not None else None
+    def __init__(self, *, panel: pd.DataFrame) -> None:
+        self._runner = CryptoLivePoolBacktestRunner(panel=panel)
 
     def run(
         self,
@@ -31,8 +31,6 @@ class CryptoBacktestRunner:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> BacktestResult:
-        if self._runner is None:
-            raise ValueError("CryptoBacktestRunner requires a real prepared market panel")
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 

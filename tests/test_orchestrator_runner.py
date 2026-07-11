@@ -22,9 +22,8 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
         from src.strategy_lifecycle.backtest_wrapper import CryptoBacktestRunner, build_backtest_runner
 
         self.assertIsNotNone(build_backtest_runner)
-        runner = CryptoBacktestRunner()
-        with self.assertRaisesRegex(ValueError, "real prepared market panel"):
-            runner.run("crypto_live_pool_rotation", {})
+        with self.assertRaises(TypeError):
+            CryptoBacktestRunner()  # type: ignore[call-arg]
 
     def test_supported_profile(self) -> None:
         self.assertIn(PROFILE_NAME, SUPPORTED_PROFILES)
