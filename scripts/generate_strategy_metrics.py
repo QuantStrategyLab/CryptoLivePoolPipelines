@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -64,8 +63,15 @@ def _track_metrics(index_table: pd.DataFrame) -> dict[str, Any]:
 
     current: dict[str, float] = {}
     baseline: dict[str, float] = {}
+    source_columns: dict[str, str] = {}
     for col in numeric_columns:
         metric_name = _canonical_metric_name(col)
+        previous_col = source_columns.get(metric_name)
+        if previous_col is not None:
+            raise ValueError(
+                f"multiple columns map to canonical metric {metric_name!r}: {previous_col!r}, {col!r}"
+            )
+        source_columns[metric_name] = str(col)
         cur = _safe_float(latest.get(col))
         values = index_table[col].map(_safe_float).dropna()
         base = _safe_float(values.abs().mean() if metric_name == "max_dd" else values.mean())
@@ -215,7 +221,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--repo",
-        default=os.environ.get("STRATEGY_METRICS_REPO", DEFAULT_REPO),
+        default=DEFAULT_REPO,
         help="Repository identifier for the metrics payload",
     )
     parser.add_argument(

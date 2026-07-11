@@ -40,6 +40,17 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
         self.assertAlmostEqual(metrics["baseline_metrics"]["max_dd"], 0.15)
         self.assertEqual(metrics["baseline_metrics"]["sharpe"], 1.0)
 
+    def test_track_metrics_rejects_canonical_name_collisions(self) -> None:
+        table = pd.DataFrame(
+            {
+                "Max Drawdown": [-0.20],
+                "max_dd": [0.10],
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "multiple columns map to canonical metric 'max_dd'"):
+            MODULE._track_metrics(table)
+
     def test_generate_payload_is_versioned_and_marks_snapshots(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
