@@ -82,22 +82,15 @@ def _track_metrics(index_table: pd.DataFrame) -> dict[str, Any]:
 
     for metric_name, columns in columns_by_metric.items():
         ordered_columns = sorted(columns, key=lambda item: _metric_source_priority(item, metric_name))
-        selected_values: tuple[float | None, float | None] | None = None
-        partial_values: tuple[float | None, float | None] | None = None
+        merged_values = pd.Series(float("nan"), index=index_table.index, dtype="float64")
         for col in ordered_columns:
-            cur = _safe_float(latest.get(col))
-            values = index_table[col].map(_safe_float).dropna()
-            base = _safe_float(values.abs().mean() if metric_name == "max_dd" else values.mean())
-            if metric_name == "max_dd" and cur is not None:
-                cur = abs(cur)
-            if partial_values is None and (cur is not None or base is not None):
-                partial_values = (cur, base)
-            if cur is not None and base is not None:
-                selected_values = (cur, base)
-                break
-        if selected_values is None:
-            selected_values = partial_values
-        selected_current, selected_baseline = selected_values or (None, None)
+            values = index_table[col].map(_safe_float).astype("float64")
+            merged_values = merged_values.combine_first(values)
+        values = merged_values.dropna()
+        selected_current = _safe_float(values.iloc[-1]) if not values.empty else None
+        selected_baseline = _safe_float(values.abs().mean() if metric_name == "max_dd" else values.mean())
+        if metric_name == "max_dd" and selected_current is not None:
+            selected_current = abs(selected_current)
         if selected_current is not None:
             current[metric_name] = selected_current
         if selected_baseline is not None:

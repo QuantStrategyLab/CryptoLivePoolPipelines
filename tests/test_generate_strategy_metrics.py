@@ -126,6 +126,19 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
 
         self.assertEqual(metrics["current_metrics"]["max_dd"], 0.20)
         self.assertEqual(metrics["current_metrics"]["win_rate"], 0.55)
+        self.assertAlmostEqual(metrics["baseline_metrics"]["max_dd"], 0.15)
+
+    def test_track_metrics_merges_gradual_alias_rename_history(self) -> None:
+        table = pd.DataFrame(
+            {
+                "max_dd": [0.10, float("nan")],
+                "Max Drawdown": [-0.20, -0.30],
+            }
+        )
+
+        metrics = MODULE._track_metrics(table)
+
+        self.assertEqual(metrics["current_metrics"]["max_dd"], 0.30)
         self.assertAlmostEqual(metrics["baseline_metrics"]["max_dd"], 0.20)
 
     def test_generate_payload_keeps_incomplete_strategy_indexes_in_performance_contract(self) -> None:
