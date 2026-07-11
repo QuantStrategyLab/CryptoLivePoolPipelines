@@ -22,9 +22,7 @@ class CryptoBacktestRunner:
     """
 
     def __init__(self, *, panel: pd.DataFrame | None = None) -> None:
-        if panel is None:
-            raise ValueError("CryptoBacktestRunner requires a real prepared market panel")
-        self._runner = CryptoLivePoolBacktestRunner(panel=panel)
+        self._runner = CryptoLivePoolBacktestRunner(panel=panel) if panel is not None else None
 
     def run(
         self,
@@ -33,11 +31,11 @@ class CryptoBacktestRunner:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> BacktestResult:
-        if strategy_profile != PROFILE_NAME:
-            raise ValueError(f"Unsupported strategy_profile={strategy_profile!r}")
+        if self._runner is None:
+            raise ValueError("CryptoBacktestRunner requires a real prepared market panel")
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
-def build_backtest_runner(*, panel: pd.DataFrame) -> CryptoBacktestRunner:
-    """Build a production adapter from a required prepared real-data panel."""
+def build_backtest_runner(*, panel: pd.DataFrame | None = None) -> CryptoBacktestRunner:
+    """Build an adapter; a real prepared panel is required before running."""
     return CryptoBacktestRunner(panel=panel)
