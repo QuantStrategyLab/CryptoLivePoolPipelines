@@ -37,7 +37,7 @@ def load_preflight_panel() -> pd.DataFrame:
         raise InsufficientEvidenceError(f"invalid lifecycle preflight bundle: {root}") from exc
     if manifest.get("contract_version") != PREFLIGHT_CONTRACT_VERSION:
         raise InsufficientEvidenceError("lifecycle preflight manifest mismatch")
-    if manifest.get("strategy_profile", PROFILE_NAME) != PROFILE_NAME:
+    if manifest.get("strategy_profile") != PROFILE_NAME:
         raise InsufficientEvidenceError("lifecycle preflight strategy_profile mismatch")
     required = {"date", "symbol", "in_universe", "open", "final_score"}
     if not required.issubset(panel.columns):
@@ -45,8 +45,10 @@ def load_preflight_panel() -> pd.DataFrame:
     panel["date"] = pd.to_datetime(panel["date"], errors="coerce")
     panel["open"] = pd.to_numeric(panel["open"], errors="coerce")
     panel["final_score"] = pd.to_numeric(panel["final_score"], errors="coerce")
-    if panel.empty or panel["date"].isna().any() or panel["open"].isna().any() or panel["final_score"].isna().any():
+    if panel.empty or panel["date"].isna().any() or panel["open"].isna().any():
         raise InsufficientEvidenceError("research_panel.csv.gz contains invalid numeric/date content")
+    if panel["final_score"].notna().sum() == 0 or panel.loc[panel["final_score"].notna(), "final_score"].isna().any():
+        raise InsufficientEvidenceError("research_panel.csv.gz has no valid scored rows")
     if (date.today() - panel["date"].dt.normalize().max().date()).days > 3:
         raise InsufficientEvidenceError("research panel preflight artifact is stale")
     return panel.set_index(["date", "symbol"]).sort_index()
