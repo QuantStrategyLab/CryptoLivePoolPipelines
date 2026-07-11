@@ -74,6 +74,31 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
         self.assertEqual(snapshot["metrics_kind"], "performance")
         self.assertEqual(set(("sharpe", "cagr", "calmar", "win_rate", "max_dd")), set(snapshot["current_metrics"]))
 
+    def test_generate_payload_keeps_missing_baseline_visible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            live_pool = root / "release" / "2026-07-11" / "live_pool.json"
+            live_pool.parent.mkdir(parents=True)
+            summary_path = root / "monthly_shadow_build_summary.json"
+            summary_path.write_text(
+                json.dumps(
+                    {
+                        "official_baseline": {
+                            "profile": "baseline",
+                            "live_pool_path": str(live_pool),
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = MODULE.generate_strategy_metrics(summary_path)
+
+        self.assertEqual(len(payload["snapshots"]), 1)
+        snapshot = payload["snapshots"][0]
+        self.assertEqual(snapshot["current_metrics"], {})
+        self.assertTrue(snapshot["source"].endswith("release_index.csv"))
+
 
 if __name__ == "__main__":
     unittest.main()

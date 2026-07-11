@@ -124,17 +124,18 @@ def generate_strategy_metrics(
     if baseline_live_pool:
         baseline_dir = Path(baseline_live_pool).parent.parent  # .../version/live_pool.json → parent dir
         baseline_index = baseline_dir / "release_index.csv"
-        if baseline_index.exists():
-            index = pd.read_csv(baseline_index)
-            metrics = _track_metrics(index)
-            snapshots.append(_snapshot_payload(
-                repo=repo,
-                profile=baseline_profile,
-                plugin="",
-                metrics=metrics,
-                source=str(summary_path),
-                generated_at=generated_at,
-            ))
+        metrics = _track_metrics(pd.read_csv(baseline_index)) if baseline_index.exists() else {
+            "current_metrics": {},
+            "baseline_metrics": {},
+        }
+        snapshots.append(_snapshot_payload(
+            repo=repo,
+            profile=baseline_profile,
+            plugin="",
+            metrics=metrics,
+            source=str(baseline_index),
+            generated_at=generated_at,
+        ))
 
     # ── shadow candidate tracks ─────────────────────────────────────
     shadow_cfg = summary.get("shadow_candidate_tracks", {})
