@@ -7,6 +7,8 @@ from typing import Any, Mapping
 
 import pandas as pd
 
+from quant_platform_kit.strategy_lifecycle.contracts import BacktestResult
+
 from .orchestrator_runner import CryptoLivePoolBacktestRunner, PROFILE_NAME
 
 
@@ -20,9 +22,7 @@ class CryptoBacktestRunner:
     """
 
     def __init__(self, *, panel: pd.DataFrame | None = None) -> None:
-        if panel is None:
-            raise ValueError("CryptoBacktestRunner requires a real prepared market panel")
-        self._runner = CryptoLivePoolBacktestRunner(panel=panel)
+        self._runner = CryptoLivePoolBacktestRunner(panel=panel) if panel is not None else None
 
     def run(
         self,
@@ -30,9 +30,11 @@ class CryptoBacktestRunner:
         params: Mapping[str, Any],
         start_date: date | None = None,
         end_date: date | None = None,
-    ) -> Any:
+    ) -> BacktestResult:
         if strategy_profile != PROFILE_NAME:
             raise ValueError(f"Unsupported strategy_profile={strategy_profile!r}")
+        if self._runner is None:
+            raise ValueError("CryptoBacktestRunner requires a real prepared market panel")
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 

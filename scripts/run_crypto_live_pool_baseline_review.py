@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     review = build_review(performance_summary=args.performance_summary, walkforward_summary=args.walkforward_summary)
     args.output_json.parent.mkdir(parents=True, exist_ok=True)
+    args.output_md.parent.mkdir(parents=True, exist_ok=True)
     args.output_json.write_text(json.dumps(review, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     args.output_md.write_text(render_markdown(review), encoding="utf-8")
     print(json.dumps({"decision": review["decision"], "promotion_allowed": False, "output": str(args.output_json)}))
