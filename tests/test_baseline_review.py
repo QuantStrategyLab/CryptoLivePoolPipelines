@@ -14,6 +14,22 @@ SPEC.loader.exec_module(MODULE)
 
 
 class BaselineReviewTests(unittest.TestCase):
+    def test_walkforward_schema_is_checked_separately_from_performance_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            performance = root / "performance.csv"
+            walkforward = root / "walkforward.csv"
+            performance.write_text("CAGR,Sharpe\n0.2,1.1\n", encoding="utf-8")
+            walkforward.write_text(
+                "window_id,test_start,test_end,window_cagr,window_sharpe\n"
+                "0,2025-01-01,2025-03-31,0.1,0.8\n",
+                encoding="utf-8",
+            )
+
+            review = MODULE.build_review(performance_summary=performance, walkforward_summary=walkforward)
+
+        self.assertEqual(review["blocking_reason_codes"], ["BASELINE_REVIEW_NOT_YET_FROZEN"])
+
     def test_missing_real_artifacts_is_insufficient_and_not_promotable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

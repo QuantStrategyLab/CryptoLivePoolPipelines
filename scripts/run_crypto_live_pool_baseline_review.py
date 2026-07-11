@@ -38,7 +38,11 @@ def _gate(gate_id: str, reason: str, *, status: str = "insufficient_evidence", r
 
 
 def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dict[str, Any]:
-    missing = [str(path) for path in (performance_summary, walkforward_summary) if not _usable_csv(path)]
+    missing = []
+    if not _usable_performance_csv(performance_summary):
+        missing.append(str(performance_summary))
+    if not _usable_walkforward_csv(walkforward_summary):
+        missing.append(str(walkforward_summary))
     reason = "MISSING_OR_INVALID_REAL_PERFORMANCE_ARTIFACT" if missing else "BASELINE_REVIEW_NOT_YET_FROZEN"
     gates = [_gate(gate_id, reason) for gate_id in GATE_NAMES]
     return {
@@ -87,29 +91,50 @@ def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dic
     }
 
 
-def _usable_csv(path: Path) -> bool:
+def _read_csv(path: Path) -> tuple[list[str], list[str]] | None:
     if not path.exists() or not path.is_file():
-        return False
+        return None
     try:
         with path.open(newline="", encoding="utf-8") as handle:
             reader = csv.reader(handle)
             header = next(reader, None)
             data_row = next(reader, None)
         if not header or not data_row:
-            return False
-        normalized = {"".join(ch for ch in cell.lower() if ch.isalnum() or ch == "_") for cell in header}
-        metric_columns = {"cagr", "sharpe", "calmar", "maxdrawdown", "max_dd", "annualizedvolatility"}
-        if not normalized.intersection(metric_columns):
-            return False
-        numeric_values = []
-        for value in data_row:
-            try:
-                numeric_values.append(float(value))
-            except (TypeError, ValueError):
-                continue
-        return bool(numeric_values)
+            return None
+        return ["".join(ch for ch in cell.lower() if ch.isalnum() or ch == "_") for cell in header], data_row
     except (OSError, UnicodeError, csv.Error):
+        return None
+
+
+def _has_numeric_value(header: list[str], row: list[str], candidates: set[str]) -> bool:
+    for index, name in enumerate(header):
+        if name not in candidates or index >= len(row):
+            continue
+        try:
+            float(row[index])
+            return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _usable_performance_csv(path: Path) -> bool:
+    parsed = _read_csv(path)
+    if parsed is None:
         return False
+    header, row = parsed
+    metrics = {"cagr", "sharpe", "calmar", "maxdrawdown", "max_dd", "annualizedvolatility"}
+    return bool(set(header).intersection(metrics)) and _has_numeric_value(header, row, metrics)
+
+
+def _usable_walkforward_csv(path: Path) -> bool:
+    parsed = _read_csv(path)
+    if parsed is None:
+        return False
+    header, row = parsed
+    required = {"window_id", "test_start", "test_end"}
+    metrics = {"window_cagr", "window_sharpe", "window_max_drawdown", "h30_precision", "h60_precision", "h90_precision"}
+    return required.issubset(set(header)) and bool(set(header).intersection(metrics)) and _has_numeric_value(header, row, metrics)
 
 
 def render_markdown(review: dict[str, Any]) -> str:
