@@ -21,8 +21,8 @@ class CryptoBacktestRunner:
     runner used by tests/research fixtures.
     """
 
-    def __init__(self, *, panel: pd.DataFrame) -> None:
-        self._runner = CryptoLivePoolBacktestRunner(panel=panel)
+    def __init__(self, *, panel: pd.DataFrame | None = None) -> None:
+        self._runner = CryptoLivePoolBacktestRunner(panel=panel) if panel is not None else None
 
     def run(
         self,
@@ -31,9 +31,17 @@ class CryptoBacktestRunner:
         start_date: date | None = None,
         end_date: date | None = None,
     ) -> BacktestResult:
+        if self._runner is None:
+            return BacktestResult(
+                strategy_profile=strategy_profile,
+                domain="crypto",
+                param_set_id="unavailable_real_data",
+                params=dict(params),
+                source_script="CryptoLivePoolPipelines.strategy_lifecycle.backtest_wrapper",
+            )
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
-def build_backtest_runner(*, panel: pd.DataFrame) -> CryptoBacktestRunner:
-    """Build the production adapter from a required prepared real-data panel."""
+def build_backtest_runner(*, panel: pd.DataFrame | None = None) -> CryptoBacktestRunner:
+    """Build a compatible adapter; missing real data yields insufficient evidence."""
     return CryptoBacktestRunner(panel=panel)

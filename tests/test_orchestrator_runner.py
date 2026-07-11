@@ -22,8 +22,9 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
         from src.strategy_lifecycle.backtest_wrapper import CryptoBacktestRunner, build_backtest_runner
 
         self.assertIsNotNone(build_backtest_runner)
-        with self.assertRaises(TypeError):
-            CryptoBacktestRunner()  # type: ignore[call-arg]
+        result = CryptoBacktestRunner().run("crypto_live_pool_rotation", {})
+        self.assertEqual(result.observation_count, 0)
+        self.assertEqual(result.param_set_id, "unavailable_real_data")
 
     def test_supported_profile(self) -> None:
         self.assertIn(PROFILE_NAME, SUPPORTED_PROFILES)
