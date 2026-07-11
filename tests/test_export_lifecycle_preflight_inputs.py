@@ -43,14 +43,31 @@ class ExportLifecyclePreflightInputsTests(unittest.TestCase):
 
     def test_export_rejects_scored_date_without_universe(self) -> None:
         panel = self._valid_panel()
-        latest_date = panel.index.get_level_values("date").max()
-        panel.loc[(latest_date, slice(None)), "in_universe"] = False
+        latest_completed_date = panel.index.get_level_values("date").unique()[-2]
+        panel.loc[(latest_completed_date, slice(None)), "in_universe"] = False
 
         with tempfile.TemporaryDirectory() as tmpdir, self.assertRaisesRegex(
             ValueError,
             "at least two in-universe symbols per scored date",
         ):
             export_lifecycle_inputs(panel, Path(tmpdir))
+
+    def test_export_preserves_open_rows_without_scores(self) -> None:
+        panel = self._valid_panel()
+        date = panel.index.get_level_values("date").unique()[500]
+        panel.loc[(date, "BTCUSDT"), ["in_universe", "final_score"]] = [False, pd.NA]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            export_lifecycle_inputs(panel, output_dir)
+            exported = pd.read_csv(output_dir / "research_panel.csv.gz")
+
+        row = exported.loc[
+            (exported["date"] == date.date().isoformat())
+            & (exported["symbol"] == "BTCUSDT")
+        ]
+        self.assertEqual(len(row), 1)
+        self.assertTrue(pd.isna(row.iloc[0]["final_score"]))
 
     def test_export_rejects_stale_combo_history_even_when_panel_is_fresh(self) -> None:
         panel = self._valid_panel()

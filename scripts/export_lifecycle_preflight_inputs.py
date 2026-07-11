@@ -32,13 +32,16 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
     frame = panel.reset_index().copy()
     frame["date"] = pd.to_datetime(frame["date"], errors="coerce").dt.tz_localize(None).dt.normalize()
     frame["symbol"] = frame["symbol"].astype(str).str.strip().str.upper()
-    lifecycle_panel = frame[["date", "symbol", *PANEL_COLUMNS]].dropna(subset=["date", "open", "final_score"])
-    if lifecycle_panel.empty:
+    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    frame = frame.loc[frame["date"] < today]
+    lifecycle_panel = frame[["date", "symbol", *PANEL_COLUMNS]].dropna(subset=["date", "open"])
+    scored_panel = lifecycle_panel.dropna(subset=["final_score"])
+    if scored_panel.empty:
         raise ValueError("research panel has no scored lifecycle rows")
-    panel_dates = pd.DatetimeIndex(sorted(lifecycle_panel["date"].unique()))
+    panel_dates = pd.DatetimeIndex(sorted(scored_panel["date"].unique()))
     if len(panel_dates) < MIN_PANEL_DAYS:
         raise ValueError(f"research panel requires at least {MIN_PANEL_DAYS} scored dates")
-    in_universe_counts = lifecycle_panel.loc[lifecycle_panel["in_universe"]].groupby("date")["symbol"].nunique()
+    in_universe_counts = scored_panel.loc[scored_panel["in_universe"]].groupby("date")["symbol"].nunique()
     in_universe_counts = in_universe_counts.reindex(panel_dates, fill_value=0)
     if int(in_universe_counts.min()) < 2:
         raise ValueError("research panel requires at least two in-universe symbols per scored date")
@@ -58,7 +61,6 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
             or max(symbol_dates) < max(reference_dates)
         ):
             raise ValueError(f"market history has incomplete symbol coverage: {symbol}")
-    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
     if today - panel_dates.max() > pd.Timedelta(days=MAX_FRESHNESS_DAYS):
         raise ValueError("research panel is stale")
     if today - max(reference_dates) > pd.Timedelta(days=MAX_FRESHNESS_DAYS):

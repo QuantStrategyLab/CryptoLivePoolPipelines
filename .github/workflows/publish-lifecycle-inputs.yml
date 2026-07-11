@@ -39,7 +39,11 @@ jobs:
       - name: Download real Binance history
         run: |
           set -euo pipefail
-          python scripts/download_history.py --top-liquid "${DOWNLOAD_TOP_LIQUID}" --force-exchange-info
+          completed_date="$(python -c 'from datetime import datetime, timedelta, timezone; print((datetime.now(timezone.utc) - timedelta(days=1)).date())')"
+          python scripts/download_history.py --top-liquid "${DOWNLOAD_TOP_LIQUID}" \
+            --end-date "${completed_date}" \
+            --force-exchange-info
+          python scripts/download_history.py --symbols ETHUSDT --end-date "${completed_date}"
 
       - name: Export production research inputs
         run: |
