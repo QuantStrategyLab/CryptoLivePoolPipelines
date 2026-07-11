@@ -83,8 +83,8 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
         "market_symbols": sorted(market_history["symbol"].unique().tolist()),
         "start_date": panel_dates.min().date().isoformat(),
         "end_date": panel_dates.max().date().isoformat(),
-        "market_start_date": min(reference_dates).date().isoformat(),
-        "market_end_date": max(reference_dates).date().isoformat(),
+        "market_start_date": market_history["date"].min().date().isoformat(),
+        "market_end_date": market_history["date"].max().date().isoformat(),
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest

@@ -37,6 +37,8 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
         panel = pd.read_csv(root / "research_panel.csv.gz", compression="gzip")
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise InsufficientEvidenceError(f"invalid lifecycle preflight bundle: {root}") from exc
+    if not isinstance(manifest, dict):
+        raise InsufficientEvidenceError("lifecycle preflight manifest must be a JSON object")
     contract_version = manifest.get("contract_version")
     if contract_version not in {PREFLIGHT_V1, PREFLIGHT_V2}:
         raise InsufficientEvidenceError("lifecycle preflight manifest mismatch")
@@ -97,6 +99,10 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
         raise InsufficientEvidenceError("research_panel.csv.gz has malformed scores for in-universe rows")
     panel_end_date = scored_dates.dt.normalize().max().date() if not scored_dates.empty else panel["date"].dt.normalize().max().date()
     panel_start_date = scored_dates.dt.normalize().min().date() if not scored_dates.empty else panel["date"].dt.normalize().min().date()
+    today = date.today()
+    market_end_date = market["date"].dt.normalize().max().date()
+    if panel_end_date > today or market_end_date > today:
+        raise InsufficientEvidenceError("preflight bundle contains future-dated data")
     if expected_start_date is not None and panel_start_date > expected_start_date:
         raise InsufficientEvidenceError("research panel starts after requested evaluation window")
     if expected_end_date is not None and panel_end_date < expected_end_date:
@@ -108,7 +114,7 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
         if manifest["start_date"] != scored_dates.dt.normalize().min().date().isoformat() or manifest["end_date"] != panel_end_date.isoformat():
             raise InsufficientEvidenceError("v2 panel date range does not match manifest")
         market_start = market["date"].dt.normalize().min().date().isoformat()
-        market_end = market["date"].dt.normalize().max().date().isoformat()
+        market_end = market_end_date.isoformat()
         if manifest["market_start_date"] != market_start or manifest["market_end_date"] != market_end:
             raise InsufficientEvidenceError("v2 market date range does not match manifest")
     return panel.set_index(["date", "symbol"]).sort_index()

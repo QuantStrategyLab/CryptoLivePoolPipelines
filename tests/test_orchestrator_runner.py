@@ -118,6 +118,26 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
                     else:
                         os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
 
+    def test_malformed_manifest_and_future_bundle_fail_closed(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError, build_backtest_runner
+
+        for malformed in (True, False):
+            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                self._write_bundle(root, age_days=-1 if not malformed else 0)
+                if malformed:
+                    (root / "manifest.json").write_text("[]", encoding="utf-8")
+                old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
+                os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
+                try:
+                    with self.assertRaises(InsufficientEvidenceError):
+                        build_backtest_runner().run(PROFILE_NAME, {})
+                finally:
+                    if old is None:
+                        os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
+                    else:
+                        os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
+
     def test_supported_profile(self) -> None:
         self.assertIn(PROFILE_NAME, SUPPORTED_PROFILES)
 
