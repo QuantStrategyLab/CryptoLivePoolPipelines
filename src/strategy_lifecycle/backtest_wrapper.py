@@ -56,6 +56,10 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
             raise InsufficientEvidenceError("v1 lifecycle preflight producer mismatch")
         if manifest.get("strategy_profile") not in {None, PROFILE_NAME}:
             raise InsufficientEvidenceError("v1 lifecycle preflight strategy_profile mismatch")
+    for field in ("panel_symbols", "market_symbols"):
+        value = manifest.get(field)
+        if value is not None and (not isinstance(value, list) or not all(isinstance(symbol, str) for symbol in value)):
+            raise InsufficientEvidenceError(f"{field} must be a list of symbols")
     required = {"date", "symbol", "in_universe", "open", "final_score"}
     if not required.issubset(panel.columns):
         raise InsufficientEvidenceError("research_panel.csv.gz missing required columns")
