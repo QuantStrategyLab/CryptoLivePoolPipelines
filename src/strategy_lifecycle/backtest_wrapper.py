@@ -1,18 +1,28 @@
-"""Crypto BacktestRunner — wraps BinancePlatform backtest for the lifecycle system."""
+"""Lifecycle backtest adapter for the crypto live-pool rotation strategy."""
 
 from __future__ import annotations
 
 from datetime import date
 from typing import Any, Mapping
 
-from quant_platform_kit.strategy_lifecycle.contracts import BacktestResult
+import pandas as pd
+
+from .orchestrator_runner import CryptoLivePoolBacktestRunner, PROFILE_NAME
 
 
 class CryptoBacktestRunner:
-    """BacktestRunner for Crypto strategies.
+    """Expose the real crypto backtest engine through the lifecycle contract.
 
-    Wraps BinancePlatform/research/backtest.py and CryptoLivePoolPipelines scripts.
+    A market panel is required deliberately: returning hard-coded metrics would
+    make a lifecycle snapshot look like performance evidence without a data
+    source. Synthetic panels remain available only through the explicit pilot
+    runner used by tests/research fixtures.
     """
+
+    def __init__(self, *, panel: pd.DataFrame | None = None) -> None:
+        if panel is None:
+            raise ValueError("CryptoBacktestRunner requires a real prepared market panel")
+        self._runner = CryptoLivePoolBacktestRunner(panel=panel)
 
     def run(
         self,
@@ -20,28 +30,12 @@ class CryptoBacktestRunner:
         params: Mapping[str, Any],
         start_date: date | None = None,
         end_date: date | None = None,
-    ) -> BacktestResult:
-        """Run backtest for a crypto strategy."""
-        return BacktestResult(
-            strategy_profile=strategy_profile,
-            domain="crypto",
-            param_set_id=f"crypto_{strategy_profile}_1",
-            params=dict(params),
-            param_version=1,
-            sharpe_ratio=1.5,
-            calmar_ratio=1.1,
-            max_drawdown=-0.20,
-            cagr=0.35,
-            volatility=0.45,
-            win_rate=0.55,
-            start_date=start_date or date(2020, 1, 1),
-            end_date=end_date or date.today(),
-            observation_count=2000,
-            benchmark_symbol="buy_hold_BTC",
-            source_script="CryptoLivePoolPipelines/scripts/run_research_backtest.py",
-        )
+    ) -> Any:
+        if strategy_profile != PROFILE_NAME:
+            raise ValueError(f"Unsupported strategy_profile={strategy_profile!r}")
+        return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
-def build_backtest_runner() -> CryptoBacktestRunner:
-    """Factory for the Crypto backtest runner."""
-    return CryptoBacktestRunner()
+def build_backtest_runner(*, panel: pd.DataFrame | None = None) -> CryptoBacktestRunner:
+    """Build a production adapter; callers must supply prepared real data."""
+    return CryptoBacktestRunner(panel=panel)
