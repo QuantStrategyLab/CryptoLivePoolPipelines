@@ -22,7 +22,9 @@ class CryptoBacktestRunner:
     """
 
     def __init__(self, *, panel: pd.DataFrame | None = None) -> None:
-        self._runner = CryptoLivePoolBacktestRunner(panel=panel) if panel is not None else None
+        if panel is None:
+            raise ValueError("CryptoBacktestRunner requires a real prepared market panel")
+        self._runner = CryptoLivePoolBacktestRunner(panel=panel)
 
     def run(
         self,
@@ -33,8 +35,6 @@ class CryptoBacktestRunner:
     ) -> BacktestResult:
         if strategy_profile != PROFILE_NAME:
             raise ValueError(f"Unsupported strategy_profile={strategy_profile!r}")
-        if self._runner is None:
-            raise ValueError("CryptoBacktestRunner requires a real prepared market panel")
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
