@@ -40,6 +40,7 @@ class ExportLifecyclePreflightInputsTests(unittest.TestCase):
         self.assertEqual(set(market_history["symbol"]), {"BTCUSDT", "ETHUSDT"})
         self.assertEqual(manifest, persisted_manifest)
         self.assertEqual(manifest["contract_version"], "crypto.lifecycle_preflight.v1")
+        self.assertEqual(manifest["strategy_profile"], "crypto_live_pool_rotation")
 
     def test_export_rejects_scored_date_without_universe(self) -> None:
         panel = self._valid_panel()

@@ -3,8 +3,12 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import json
+import os
 from datetime import date
 from pathlib import Path
+
+import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -24,8 +28,37 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
         self.assertIsNotNone(build_backtest_runner)
         from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError
 
-        with self.assertRaises(InsufficientEvidenceError):
-            build_backtest_runner()
+        old = os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
+        try:
+            with self.assertRaises(InsufficientEvidenceError):
+                build_backtest_runner()
+        finally:
+            if old is not None:
+                os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
+
+    def test_no_arg_factory_loads_valid_preflight_bundle(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import build_backtest_runner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dates = pd.date_range(end=pd.Timestamp.today().normalize(), periods=3, freq="D")
+            pd.DataFrame({
+                "date": dates,
+                "symbol": ["BTCUSDT"] * 3,
+                "in_universe": [True] * 3,
+                "open": [100.0, 101.0, 102.0],
+                "final_score": [0.1, 0.2, 0.3],
+            }).to_csv(root / "research_panel.csv.gz", index=False, compression="gzip")
+            (root / "manifest.json").write_text(json.dumps({"contract_version": "crypto.lifecycle_preflight.v1", "strategy_profile": "crypto_live_pool_rotation"}), encoding="utf-8")
+            old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
+            os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
+            try:
+                self.assertIsNotNone(build_backtest_runner())
+            finally:
+                if old is None:
+                    os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
+                else:
+                    os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
 
     def test_supported_profile(self) -> None:
         self.assertIn(PROFILE_NAME, SUPPORTED_PROFILES)
