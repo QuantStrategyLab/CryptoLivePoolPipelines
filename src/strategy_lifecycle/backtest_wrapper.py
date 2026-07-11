@@ -45,7 +45,7 @@ def load_preflight_panel(expected_end_date: date | None = None) -> pd.DataFrame:
             "contract_version", "domain", "producer", "strategy_profile", "panel_rows", "panel_symbols",
             "market_rows", "market_symbols", "start_date", "end_date", "market_start_date", "market_end_date",
         }
-        if set(manifest) != required_manifest:
+        if not required_manifest.issubset(manifest):
             raise InsufficientEvidenceError("v2 lifecycle preflight manifest fields are incomplete")
         if manifest["domain"] != "crypto" or manifest["producer"] != "export_lifecycle_preflight_inputs.py" or manifest["strategy_profile"] != PROFILE_NAME:
             raise InsufficientEvidenceError("v2 lifecycle preflight identity mismatch")
