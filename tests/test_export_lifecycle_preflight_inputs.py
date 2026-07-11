@@ -74,6 +74,22 @@ class ExportLifecyclePreflightInputsTests(unittest.TestCase):
         self.assertEqual(len(row), 1)
         self.assertTrue(pd.isna(row.iloc[0]["final_score"]))
 
+    def test_manifest_bounds_use_scored_rows_with_unscored_boundaries(self) -> None:
+        panel = self._valid_panel()
+        dates = panel.index.get_level_values("date").unique()
+        for boundary in (dates[0], dates[-2]):
+            panel.loc[(boundary, slice(None)), ["in_universe", "final_score"]] = [False, pd.NA]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            manifest = export_lifecycle_inputs(panel, output_dir)
+            exported = pd.read_csv(output_dir / "research_panel.csv.gz")
+
+        scored = exported.dropna(subset=["final_score"])
+        self.assertEqual(manifest["start_date"], scored["date"].min())
+        self.assertEqual(manifest["end_date"], scored["date"].max())
+        self.assertNotEqual(manifest["start_date"], exported["date"].min())
+
     def test_export_rejects_stale_combo_history_even_when_panel_is_fresh(self) -> None:
         panel = self._valid_panel()
         cutoff = panel.index.get_level_values("date").max() - pd.Timedelta(days=10)

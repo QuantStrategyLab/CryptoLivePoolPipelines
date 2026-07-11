@@ -79,6 +79,7 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
     panel["in_universe"] = universe_values.astype(bool)
     if panel.empty or panel["date"].isna().any() or panel["open"].isna().any() or not panel["open"].map(math.isfinite).all():
         raise InsufficientEvidenceError("research_panel.csv.gz contains invalid numeric/date content")
+    # v2/v1 optional bounds are compared with scored rows, not warm-up/unscored CSV rows.
     scored_dates = panel.loc[panel["final_score"].notna(), "date"]
     if not panel["final_score"].dropna().map(math.isfinite).all():
         raise InsufficientEvidenceError("research_panel.csv.gz contains non-finite scores")

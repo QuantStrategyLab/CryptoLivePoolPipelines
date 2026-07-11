@@ -5,7 +5,7 @@ import tempfile
 import unittest
 import json
 import os
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -94,6 +94,25 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
                 result = runner.run(PROFILE_NAME, {})
                 self.assertEqual(result.strategy_profile, PROFILE_NAME)
                 self.assertIsNotNone(runner._runner)
+            finally:
+                if old is None:
+                    os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)
+                else:
+                    os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = old
+
+    def test_no_arg_runner_revalidates_second_window(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError, build_backtest_runner
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root)
+            old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
+            os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
+            try:
+                runner = build_backtest_runner()
+                runner.run(PROFILE_NAME, {}, start_date=date.today() - timedelta(days=100))
+                with self.assertRaises(InsufficientEvidenceError):
+                    runner.run(PROFILE_NAME, {}, start_date=date.today() - timedelta(days=1000))
             finally:
                 if old is None:
                     os.environ.pop("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT", None)

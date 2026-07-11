@@ -38,11 +38,12 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
     scored_panel = lifecycle_panel.dropna(subset=["final_score"])
     if scored_panel.empty:
         raise ValueError("research panel has no scored lifecycle rows")
-    panel_dates = pd.DatetimeIndex(sorted(scored_panel["date"].unique()))
-    if len(panel_dates) < MIN_PANEL_DAYS:
+    # v2 bounds are the scored_panel bounds; warm-up/unscored rows remain in the CSV.
+    scored_dates = pd.DatetimeIndex(sorted(scored_panel["date"].unique()))
+    if len(scored_dates) < MIN_PANEL_DAYS:
         raise ValueError(f"research panel requires at least {MIN_PANEL_DAYS} scored dates")
     in_universe_counts = scored_panel.loc[scored_panel["in_universe"]].groupby("date")["symbol"].nunique()
-    in_universe_counts = in_universe_counts.reindex(panel_dates, fill_value=0)
+    in_universe_counts = in_universe_counts.reindex(scored_dates, fill_value=0)
     if int(in_universe_counts.min()) < 2:
         raise ValueError("research panel requires at least two in-universe symbols per scored date")
 
@@ -61,7 +62,7 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
             or max(symbol_dates) < max(reference_dates)
         ):
             raise ValueError(f"market history has incomplete symbol coverage: {symbol}")
-    if today - panel_dates.max() > pd.Timedelta(days=MAX_FRESHNESS_DAYS):
+    if today - scored_dates.max() > pd.Timedelta(days=MAX_FRESHNESS_DAYS):
         raise ValueError("research panel is stale")
     if today - max(reference_dates) > pd.Timedelta(days=MAX_FRESHNESS_DAYS):
         raise ValueError("BTC/ETH market history is stale")
@@ -81,8 +82,8 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
         "panel_symbols": sorted(lifecycle_panel["symbol"].unique().tolist()),
         "market_rows": int(len(market_history)),
         "market_symbols": sorted(market_history["symbol"].unique().tolist()),
-        "start_date": panel_dates.min().date().isoformat(),
-        "end_date": panel_dates.max().date().isoformat(),
+        "start_date": scored_dates.min().date().isoformat(),
+        "end_date": scored_dates.max().date().isoformat(),
         "market_start_date": market_history["date"].min().date().isoformat(),
         "market_end_date": market_history["date"].max().date().isoformat(),
     }
