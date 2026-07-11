@@ -52,6 +52,31 @@ jobs:
             --universe-mode broad_liquid \
             --output-dir "${RUNNER_TEMP}/crypto-lifecycle-inputs"
 
+      - name: Inject and verify lifecycle preflight runtime wiring
+        env:
+          CRYPTO_LIFECYCLE_PREFLIGHT_ROOT: ${{ runner.temp }}/crypto-lifecycle-inputs
+        run: |
+          set -euo pipefail
+          echo "CRYPTO_LIFECYCLE_PREFLIGHT_ROOT=${CRYPTO_LIFECYCLE_PREFLIGHT_ROOT}" >> "$GITHUB_ENV"
+          python - <<'PY'
+          import json
+          import os
+          from datetime import date
+          from src.strategy_lifecycle.backtest_wrapper import build_backtest_runner
+
+          with open(os.path.join(os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"], "manifest.json"), encoding="utf-8") as handle:
+              manifest = json.load(handle)
+          runner = build_backtest_runner()
+          result = runner.run(
+              "crypto_live_pool_rotation",
+              {},
+              end_date=date.fromisoformat(manifest["end_date"]),
+          )
+          if result.observation_count <= 0:
+              raise SystemExit("real lifecycle preflight produced no observations")
+          print(f"verified real lifecycle runner observations={result.observation_count}")
+          PY
+
       - name: Upload lifecycle inputs
         uses: actions/upload-artifact@v7
         with:
