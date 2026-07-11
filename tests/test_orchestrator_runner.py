@@ -23,7 +23,7 @@ from src.strategy_lifecycle.orchestrator_runner import (  # noqa: E402
 
 class CryptoOrchestratorRunnerTests(unittest.TestCase):
     @staticmethod
-    def _write_bundle(root: Path, *, version: str = "v1", days: int = 150, age_days: int = 0, non_finite: bool = False) -> None:
+    def _write_bundle(root: Path, *, version: str = "v1", days: int = 900, age_days: int = 0, non_finite: bool = False) -> None:
         from src.strategy_lifecycle.orchestrator_runner import _synthetic_panel
 
         panel = _synthetic_panel(days=days).reset_index()
@@ -177,6 +177,15 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["panel_symbols"] = None
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaises(InsufficientEvidenceError):
+                load_preflight_panel(root)
+
+    def test_undersized_bundle_fails_closed(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError, load_preflight_panel
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root, version="v2", days=100)
             with self.assertRaises(InsufficientEvidenceError):
                 load_preflight_panel(root)
 

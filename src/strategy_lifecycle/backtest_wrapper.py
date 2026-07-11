@@ -23,6 +23,9 @@ class InsufficientEvidenceError(RuntimeError):
 PREFLIGHT_V1 = "crypto.lifecycle_preflight.v1"
 PREFLIGHT_V2 = "crypto.lifecycle_preflight.v2"
 PREFLIGHT_ENV = "CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"
+MIN_PANEL_DAYS = 730
+MIN_MARKET_DAYS = 900
+MARKET_SYMBOLS = ("BTCUSDT", "ETHUSDT")
 
 
 def load_preflight_panel(expected_start_date: date | None = None, expected_end_date: date | None = None) -> pd.DataFrame:
@@ -58,7 +61,7 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
             raise InsufficientEvidenceError("v1 lifecycle preflight strategy_profile mismatch")
     for field in ("panel_symbols", "market_symbols"):
         value = manifest.get(field)
-        if value is not None and (not isinstance(value, list) or not all(isinstance(symbol, str) for symbol in value)):
+        if field in manifest and (not isinstance(value, list) or not all(isinstance(symbol, str) for symbol in value)):
             raise InsufficientEvidenceError(f"{field} must be a list of symbols")
     required = {"date", "symbol", "in_universe", "open", "final_score"}
     if not required.issubset(panel.columns):
@@ -92,6 +95,16 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
     market["close"] = pd.to_numeric(market["close"], errors="coerce")
     if market.empty or market["date"].isna().any() or market["close"].isna().any() or not market["close"].map(math.isfinite).all():
         raise InsufficientEvidenceError("market_history.csv.gz contains invalid content")
+    market_dates = market["date"].dt.normalize()
+    if market_dates.nunique() < MIN_MARKET_DAYS:
+        raise InsufficientEvidenceError("market history has insufficient date coverage")
+    reference_dates = set(market.loc[market["symbol"] == MARKET_SYMBOLS[0], "date"].dt.normalize())
+    if not reference_dates:
+        raise InsufficientEvidenceError("market history is missing BTCUSDT coverage")
+    for symbol in MARKET_SYMBOLS:
+        symbol_dates = set(market.loc[market["symbol"] == symbol, "date"].dt.normalize())
+        if not symbol_dates or len(symbol_dates & reference_dates) / len(reference_dates) < 0.99:
+            raise InsufficientEvidenceError(f"market history has incomplete {symbol} coverage")
     if manifest.get("panel_rows") is not None and (manifest["panel_rows"] != len(panel) or sorted(manifest.get("panel_symbols", [])) != sorted(panel["symbol"].dropna().unique().tolist())):
         raise InsufficientEvidenceError("research panel does not match manifest counts or symbols")
     if manifest.get("market_rows") is not None and (manifest["market_rows"] != len(market) or sorted(manifest.get("market_symbols", [])) != sorted(market["symbol"].dropna().unique().tolist())):
@@ -101,6 +114,14 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
     in_universe = panel["in_universe"]
     if panel.loc[in_universe, "final_score"].isna().any():
         raise InsufficientEvidenceError("research_panel.csv.gz has malformed scores for in-universe rows")
+    scored_panel = panel.loc[panel["final_score"].notna()].copy()
+    scored_panel["date"] = scored_panel["date"].dt.normalize()
+    scored_dates = scored_panel["date"]
+    if scored_dates.nunique() < MIN_PANEL_DAYS:
+        raise InsufficientEvidenceError("research panel has insufficient scored date coverage")
+    in_universe_counts = scored_panel.loc[scored_panel["in_universe"]].groupby("date")["symbol"].nunique()
+    if in_universe_counts.reindex(scored_dates.unique(), fill_value=0).min() < 2:
+        raise InsufficientEvidenceError("research panel has insufficient in-universe coverage")
     panel_end_date = scored_dates.dt.normalize().max().date() if not scored_dates.empty else panel["date"].dt.normalize().max().date()
     panel_start_date = scored_dates.dt.normalize().min().date() if not scored_dates.empty else panel["date"].dt.normalize().min().date()
     today = date.today()
