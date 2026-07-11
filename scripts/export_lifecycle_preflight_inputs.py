@@ -74,6 +74,7 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
     market_history.to_csv(market_path, index=False, compression="gzip")
     manifest = {
         "contract_version": "crypto.lifecycle_preflight.v1",
+        "producer": "export_lifecycle_preflight_inputs.py",
         "strategy_profile": "crypto_live_pool_rotation",
         "panel_rows": int(len(lifecycle_panel)),
         "panel_symbols": sorted(lifecycle_panel["symbol"].unique().tolist()),

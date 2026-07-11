@@ -47,7 +47,8 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
             panel["date"] = pd.to_datetime(panel["date"])
             panel["date"] += pd.Timestamp.today().normalize() - panel["date"].max()
             panel.to_csv(root / "research_panel.csv.gz", index=False, compression="gzip")
-            (root / "manifest.json").write_text(json.dumps({"contract_version": "crypto.lifecycle_preflight.v1", "strategy_profile": "crypto_live_pool_rotation"}), encoding="utf-8")
+            panel[["date", "symbol", "open"]].rename(columns={"open": "close"}).to_csv(root / "market_history.csv.gz", index=False, compression="gzip")
+            (root / "manifest.json").write_text(json.dumps({"contract_version": "crypto.lifecycle_preflight.v1", "producer": "export_lifecycle_preflight_inputs.py", "strategy_profile": "crypto_live_pool_rotation"}), encoding="utf-8")
             old = os.environ.get("CRYPTO_LIFECYCLE_PREFLIGHT_ROOT")
             os.environ["CRYPTO_LIFECYCLE_PREFLIGHT_ROOT"] = str(root)
             try:

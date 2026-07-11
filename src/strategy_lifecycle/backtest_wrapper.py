@@ -37,6 +37,8 @@ def load_preflight_panel() -> pd.DataFrame:
         raise InsufficientEvidenceError(f"invalid lifecycle preflight bundle: {root}") from exc
     if manifest.get("contract_version") != PREFLIGHT_CONTRACT_VERSION:
         raise InsufficientEvidenceError("lifecycle preflight manifest mismatch")
+    if manifest.get("producer") != "export_lifecycle_preflight_inputs.py":
+        raise InsufficientEvidenceError("lifecycle preflight producer mismatch")
     if manifest.get("strategy_profile") != PROFILE_NAME:
         raise InsufficientEvidenceError("lifecycle preflight strategy_profile mismatch")
     required = {"date", "symbol", "in_universe", "open", "final_score"}
@@ -47,6 +49,19 @@ def load_preflight_panel() -> pd.DataFrame:
     panel["final_score"] = pd.to_numeric(panel["final_score"], errors="coerce")
     if panel.empty or panel["date"].isna().any() or panel["open"].isna().any():
         raise InsufficientEvidenceError("research_panel.csv.gz contains invalid numeric/date content")
+    market_path = root / "market_history.csv.gz"
+    if not market_path.exists():
+        raise InsufficientEvidenceError("preflight bundle missing market_history.csv.gz")
+    try:
+        market = pd.read_csv(market_path, compression="gzip")
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise InsufficientEvidenceError("invalid market_history.csv.gz") from exc
+    if not {"date", "symbol", "close"}.issubset(market.columns):
+        raise InsufficientEvidenceError("market_history.csv.gz missing required columns")
+    market["date"] = pd.to_datetime(market["date"], errors="coerce")
+    market["close"] = pd.to_numeric(market["close"], errors="coerce")
+    if market.empty or market["date"].isna().any() or market["close"].isna().any():
+        raise InsufficientEvidenceError("market_history.csv.gz contains invalid content")
     if panel["final_score"].notna().sum() == 0:
         raise InsufficientEvidenceError("research_panel.csv.gz has no valid scored rows")
     in_universe = panel["in_universe"].astype(str).str.lower().isin({"true", "1", "yes"})
