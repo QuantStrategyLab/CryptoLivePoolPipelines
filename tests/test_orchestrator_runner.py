@@ -227,6 +227,19 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
             with self.assertRaises(InsufficientEvidenceError):
                 load_preflight_panel(root)
 
+    def test_duplicate_preflight_rows_fail_closed(self) -> None:
+        from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError, load_preflight_panel
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_bundle(root, version="v2")
+            panel_path = root / "research_panel.csv.gz"
+            panel = pd.read_csv(panel_path, compression="gzip")
+            panel = pd.concat([panel, panel.iloc[[0]]], ignore_index=True)
+            panel.to_csv(panel_path, index=False, compression="gzip")
+            with self.assertRaises(InsufficientEvidenceError):
+                load_preflight_panel(root)
+
     def test_supported_profile(self) -> None:
         self.assertIn(PROFILE_NAME, SUPPORTED_PROFILES)
 

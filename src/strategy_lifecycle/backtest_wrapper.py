@@ -69,6 +69,8 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
     panel["date"] = pd.to_datetime(panel["date"], errors="coerce").dt.normalize()
     panel["open"] = pd.to_numeric(panel["open"], errors="coerce")
     panel["final_score"] = pd.to_numeric(panel["final_score"], errors="coerce")
+    if panel.duplicated(["date", "symbol"]).any():
+        raise InsufficientEvidenceError("research_panel.csv.gz contains duplicate date/symbol rows")
     universe_values = panel["in_universe"].map(
         lambda value: value if isinstance(value, bool) else {
             "true": True, "1": True, "false": False, "0": False,
@@ -94,6 +96,8 @@ def load_preflight_panel(expected_start_date: date | None = None, expected_end_d
         raise InsufficientEvidenceError("market_history.csv.gz missing required columns")
     market["date"] = pd.to_datetime(market["date"], errors="coerce")
     market["close"] = pd.to_numeric(market["close"], errors="coerce")
+    if market.duplicated(["date", "symbol"]).any():
+        raise InsufficientEvidenceError("market_history.csv.gz contains duplicate date/symbol rows")
     if market.empty or market["date"].isna().any() or market["close"].isna().any() or not market["close"].map(math.isfinite).all():
         raise InsufficientEvidenceError("market_history.csv.gz contains invalid content")
     market_dates = market["date"].dt.normalize()
