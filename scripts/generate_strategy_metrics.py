@@ -81,16 +81,25 @@ def _track_metrics(index_table: pd.DataFrame) -> dict[str, Any]:
         columns_by_metric.setdefault(metric_name, []).append(col)
 
     for metric_name, columns in columns_by_metric.items():
-        col = min(columns, key=lambda item: _metric_source_priority(item, metric_name))
-        cur = _safe_float(latest.get(col))
-        values = index_table[col].map(_safe_float).dropna()
-        base = _safe_float(values.abs().mean() if metric_name == "max_dd" else values.mean())
-        if metric_name == "max_dd" and cur is not None:
-            cur = abs(cur)
-        if cur is not None:
-            current[metric_name] = cur
-        if base is not None:
-            baseline[metric_name] = base
+        ordered_columns = sorted(columns, key=lambda item: _metric_source_priority(item, metric_name))
+        selected_current: float | None = None
+        selected_baseline: float | None = None
+        for col in ordered_columns:
+            cur = _safe_float(latest.get(col))
+            values = index_table[col].map(_safe_float).dropna()
+            base = _safe_float(values.abs().mean() if metric_name == "max_dd" else values.mean())
+            if metric_name == "max_dd" and cur is not None:
+                cur = abs(cur)
+            if selected_current is None and cur is not None:
+                selected_current = cur
+            if selected_baseline is None and base is not None:
+                selected_baseline = base
+            if selected_current is not None and selected_baseline is not None:
+                break
+        if selected_current is not None:
+            current[metric_name] = selected_current
+        if selected_baseline is not None:
+            baseline[metric_name] = selected_baseline
 
     return {"current_metrics": current, "baseline_metrics": baseline}
 
@@ -143,14 +152,17 @@ def generate_strategy_metrics(
         baseline_dir = Path(baseline_live_pool).parent.parent  # .../version/live_pool.json → parent dir
         baseline_index = baseline_dir / "release_index.csv"
         if baseline_index.exists():
-            snapshots.append(_snapshot_payload(
-                repo=repo,
-                profile=baseline_profile,
-                plugin="",
-                metrics=_track_metrics(pd.read_csv(baseline_index)),
-                source=str(baseline_index),
-                generated_at=generated_at,
-            ))
+            baseline_metrics = _track_metrics(pd.read_csv(baseline_index))
+        else:
+            baseline_metrics = {"current_metrics": {}, "baseline_metrics": {}}
+        snapshots.append(_snapshot_payload(
+            repo=repo,
+            profile=baseline_profile,
+            plugin="",
+            metrics=baseline_metrics,
+            source=str(baseline_index),
+            generated_at=generated_at,
+        ))
 
     # ── shadow candidate tracks ─────────────────────────────────────
     shadow_cfg = summary.get("shadow_candidate_tracks", {})

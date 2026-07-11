@@ -106,7 +106,26 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
 
             payload = MODULE.generate_strategy_metrics(summary_path)
 
-        self.assertEqual(payload["snapshots"], [])
+        self.assertEqual(len(payload["snapshots"]), 1)
+        snapshot = payload["snapshots"][0]
+        self.assertEqual(snapshot["schema_version"], "strategy_performance.v2")
+        self.assertEqual(snapshot["current_metrics"], {})
+        self.assertTrue(snapshot["source"].endswith("release_index.csv"))
+
+    def test_track_metrics_falls_back_to_valid_alias_on_empty_preferred_column(self) -> None:
+        table = pd.DataFrame(
+            {
+                "max_dd": [float("nan")],
+                "Max Drawdown": [-0.20],
+                "win_rate": [float("nan")],
+                "WinRate": [0.55],
+            }
+        )
+
+        metrics = MODULE._track_metrics(table)
+
+        self.assertEqual(metrics["current_metrics"]["max_dd"], 0.20)
+        self.assertEqual(metrics["current_metrics"]["win_rate"], 0.55)
 
     def test_generate_payload_keeps_incomplete_strategy_indexes_in_performance_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
