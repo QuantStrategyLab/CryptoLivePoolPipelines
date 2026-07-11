@@ -35,7 +35,6 @@ PERFORMANCE_SCHEMA_VERSION = "strategy_performance.v2"
 METRICS_KIND_PERFORMANCE = "performance"
 OPERATIONAL_SCHEMA_VERSION = "strategy_operational_metrics.v1"
 METRICS_KIND_OPERATIONAL = "operational_quality"
-METRICS_BUNDLE_SCHEMA_VERSION = "strategy_metrics_bundle.v1"
 REQUIRED_PERFORMANCE_METRICS = frozenset({"sharpe", "cagr", "calmar", "win_rate", "max_dd"})
 
 
@@ -107,11 +106,13 @@ def _snapshot_payload(
     metrics: dict[str, Any],
     source: str,
     generated_at: str,
+    expected_performance: bool = False,
 ) -> dict[str, Any]:
     current_metrics = metrics["current_metrics"]
     baseline_metrics = metrics["baseline_metrics"]
-    is_performance = REQUIRED_PERFORMANCE_METRICS.issubset(current_metrics) and REQUIRED_PERFORMANCE_METRICS.issubset(
-        baseline_metrics
+    is_performance = expected_performance or (
+        REQUIRED_PERFORMANCE_METRICS.issubset(current_metrics)
+        and REQUIRED_PERFORMANCE_METRICS.issubset(baseline_metrics)
     )
     return {
         "repo": repo,
@@ -187,6 +188,7 @@ def generate_strategy_metrics(
                 metrics={"current_metrics": {}, "baseline_metrics": {}},
                 source=str(index_path) if index_path else "",
                 generated_at=generated_at,
+                expected_performance=True,
             ))
             continue
 
@@ -201,15 +203,10 @@ def generate_strategy_metrics(
             generated_at=generated_at,
         ))
 
-    contracts = {(snapshot["schema_version"], snapshot["metrics_kind"]) for snapshot in snapshots}
-    if len(contracts) == 1:
-        schema_version, metrics_kind = next(iter(contracts))
-    else:
-        schema_version, metrics_kind = METRICS_BUNDLE_SCHEMA_VERSION, "mixed"
     payload: dict[str, Any] = {
         "repo": repo,
-        "schema_version": schema_version,
-        "metrics_kind": metrics_kind,
+        "schema_version": PERFORMANCE_SCHEMA_VERSION,
+        "metrics_kind": METRICS_KIND_PERFORMANCE,
         "generated_at": generated_at,
         "source": "monthly_shadow_build",
         "snapshots": snapshots,

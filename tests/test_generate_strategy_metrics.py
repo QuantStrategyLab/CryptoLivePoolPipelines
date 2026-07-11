@@ -132,9 +132,37 @@ class GenerateStrategyMetricsTests(unittest.TestCase):
 
             payload = MODULE.generate_strategy_metrics(summary_path)
 
-        self.assertEqual(payload["schema_version"], "strategy_operational_metrics.v1")
-        self.assertEqual(payload["metrics_kind"], "operational_quality")
+        self.assertEqual(payload["schema_version"], "strategy_performance.v2")
+        self.assertEqual(payload["metrics_kind"], "performance")
         self.assertEqual(payload["snapshots"][0]["metrics_kind"], "operational_quality")
+
+    def test_missing_shadow_index_remains_performance_data_quality_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            summary_path = root / "monthly_shadow_build_summary.json"
+            summary_path.write_text(
+                json.dumps(
+                    {
+                        "shadow_candidate_tracks": {
+                            "tracks": [
+                                {
+                                    "track_id": "candidate-a",
+                                    "profile_name": "candidate_a",
+                                    "release_index_path": "data/output/missing/release_index.csv",
+                                }
+                            ]
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            payload = MODULE.generate_strategy_metrics(summary_path)
+
+        snapshot = payload["snapshots"][0]
+        self.assertEqual(snapshot["schema_version"], "strategy_performance.v2")
+        self.assertEqual(snapshot["metrics_kind"], "performance")
+        self.assertEqual(snapshot["current_metrics"], {})
 
 
 if __name__ == "__main__":
