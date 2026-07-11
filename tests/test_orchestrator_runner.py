@@ -236,7 +236,7 @@ class CryptoOrchestratorRunnerTests(unittest.TestCase):
                 holdings=pd.DataFrame(),
                 trades=pd.DataFrame(),
                 turnover=pd.Series([0.0, 0.0]),
-                metrics={"CAGR": -0.1, "Max Drawdown": 0.2, "Sharpe": -0.1},
+                metrics={"CAGR": -0.1, "Max Drawdown": -0.2, "Sharpe": -0.1},
             )
 
         with patch("src.strategy_lifecycle.orchestrator_runner.run_single_backtest", side_effect=fake_backtest):

@@ -78,7 +78,7 @@ def _metrics_to_qpk_result(
         raise ImportError("quant_platform_kit is required to build BacktestResult")
     cagr = float(metrics.get("CAGR") or 0.0)
     max_drawdown = float(metrics.get("Max Drawdown") or 0.0)
-    calmar = cagr / max_drawdown if max_drawdown else None
+    calmar = cagr / abs(max_drawdown) if max_drawdown else None
     return QpkBacktestResult(
         strategy_profile=strategy_profile,
         domain="crypto",
