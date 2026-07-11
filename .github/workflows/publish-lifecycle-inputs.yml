@@ -1,0 +1,61 @@
+name: Publish Lifecycle Inputs
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60
+    env:
+      DOWNLOAD_TOP_LIQUID: "90"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          requirements_file=requirements-lock.txt
+          if [ ! -f "${requirements_file}" ]; then requirements_file=requirements.txt; fi
+          python -m pip install -r "${requirements_file}"
+
+      - name: Download real Binance history
+        run: |
+          set -euo pipefail
+          completed_date="$(python -c 'from datetime import datetime, timedelta, timezone; print((datetime.now(timezone.utc) - timedelta(days=1)).date())')"
+          python scripts/download_history.py --top-liquid "${DOWNLOAD_TOP_LIQUID}" \
+            --end-date "${completed_date}" \
+            --force-exchange-info
+          python scripts/download_history.py --symbols ETHUSDT --end-date "${completed_date}"
+
+      - name: Export production research inputs
+        run: |
+          set -euo pipefail
+          python scripts/export_lifecycle_preflight_inputs.py \
+            --universe-mode broad_liquid \
+            --output-dir "${RUNNER_TEMP}/crypto-lifecycle-inputs"
+
+      - name: Upload lifecycle inputs
+        uses: actions/upload-artifact@v7
+        with:
+          name: crypto-lifecycle-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/crypto-lifecycle-inputs
+          if-no-files-found: error
+          retention-days: 30
