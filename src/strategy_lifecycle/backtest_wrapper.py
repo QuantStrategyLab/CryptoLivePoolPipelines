@@ -36,6 +36,11 @@ class CryptoBacktestRunner:
         return self._runner.run(strategy_profile, params, start_date=start_date, end_date=end_date)
 
 
-def build_backtest_runner(*, panel: pd.DataFrame) -> CryptoBacktestRunner:
-    """Build an adapter from a required prepared real-data panel."""
+def build_backtest_runner() -> CryptoBacktestRunner:
+    """Preserve the legacy entrypoint; running without evidence fails closed."""
+    return CryptoBacktestRunner()
+
+
+def build_real_backtest_runner(*, panel: pd.DataFrame) -> CryptoBacktestRunner:
+    """Build the production adapter from a required prepared real-data panel."""
     return CryptoBacktestRunner(panel=panel)

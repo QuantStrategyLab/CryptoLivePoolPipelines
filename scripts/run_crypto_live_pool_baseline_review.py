@@ -68,8 +68,10 @@ def _usable_csv(path: Path) -> bool:
         return False
     try:
         with path.open(newline="", encoding="utf-8") as handle:
-            rows = list(csv.reader(handle))
-        return len(rows) >= 2 and any(cell.strip() for cell in rows[0])
+            reader = csv.reader(handle)
+            header = next(reader, None)
+            data_row = next(reader, None)
+        return bool(header and data_row and any(cell.strip() for cell in header))
     except (OSError, UnicodeError, csv.Error):
         return False
 
