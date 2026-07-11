@@ -19,7 +19,7 @@ from src.strategy_lifecycle.orchestrator_runner import (  # noqa: E402
 
 class CryptoOrchestratorRunnerTests(unittest.TestCase):
     def test_production_wrapper_requires_real_panel(self) -> None:
-        from src.strategy_lifecycle.backtest_wrapper import CryptoBacktestRunner, build_backtest_runner
+        from src.strategy_lifecycle.backtest_wrapper import build_backtest_runner
 
         self.assertIsNotNone(build_backtest_runner)
         from src.strategy_lifecycle.backtest_wrapper import InsufficientEvidenceError
