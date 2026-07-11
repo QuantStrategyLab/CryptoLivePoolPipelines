@@ -57,6 +57,8 @@ def build_review(*, performance_summary: Path, walkforward_summary: Path) -> dic
             "oos_folds": 0,
             "cost_model": "unavailable",
             "placeholder_metrics": False,
+            "source_revision": "unavailable",
+            "data_timestamp": "unavailable",
             "missing_artifacts": missing,
             "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         },
