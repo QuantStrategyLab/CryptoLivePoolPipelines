@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -111,8 +112,9 @@ def _has_numeric_value(header: list[str], row: list[str], candidates: set[str]) 
         if name not in candidates or index >= len(row):
             continue
         try:
-            float(row[index])
-            return True
+            value = float(row[index])
+            if math.isfinite(value):
+                return True
         except (TypeError, ValueError):
             continue
     return False
