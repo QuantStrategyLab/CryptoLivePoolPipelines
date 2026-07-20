@@ -15,7 +15,7 @@ dependencies = [
   "requests==2.34.2",
   "matplotlib==3.11.0",
   "PyYAML==6.0.3",
-  "lightgbm==4.6.0",
+  "lightgbm==4.7.0",
   "scikit-learn==1.9.0",
   "scipy==1.17.1",
   "joblib==1.5.3",
