@@ -2,7 +2,7 @@ quant-platform-kit @ git+https://github.com/QuantStrategyLab/QuantPlatformKit.gi
 pandas==3.0.3
 numpy==2.4.6
 requests==2.34.2
-matplotlib==3.11.0
+matplotlib==3.11.1
 PyYAML==6.0.3
 lightgbm==4.7.0
 scikit-learn==1.9.0
