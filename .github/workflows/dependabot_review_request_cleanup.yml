@@ -6,11 +6,12 @@ name: Dismiss Dependabot Review Request
 
 permissions:
   contents: read
+  issues: read
   pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   dismiss-review-request:
@@ -37,6 +38,17 @@ jobs:
             echo "No review request for ${REVIEWER}; nothing to dismiss." >> "${GITHUB_STEP_SUMMARY}"
             exit 0
           fi
+
+          latest_request_actor="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/timeline?per_page=100" \
+            --jq '[.[] | select(.event == "review_requested" and .requested_reviewer.login == "Pigbibi")][-1].actor.login // ""')"
+          case "${latest_request_actor}" in
+            'dependabot[bot]'|'app/dependabot') ;;
+            *)
+              echo "Latest review request was made by ${latest_request_actor:-<unknown>}; preserving it." >> "${GITHUB_STEP_SUMMARY}"
+              exit 0
+              ;;
+          esac
 
           gh api --method DELETE \
             "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/requested_reviewers" \
