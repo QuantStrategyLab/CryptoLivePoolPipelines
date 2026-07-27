@@ -1,5 +1,5 @@
 quant-platform-kit @ git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@0c69df08144872ccd1d8bf523738e80748d8d664
-pandas==3.0.3
+pandas==3.0.5
 numpy==2.4.6
 requests==2.34.2
 matplotlib==3.11.0
