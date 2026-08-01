@@ -39,6 +39,10 @@ def export_latest_ranking(panel: pd.DataFrame, output_dir: str | Any, as_of_date
     snapshot = sort_ranking_snapshot(snapshot)
     snapshot["as_of_date"] = date_to_str(as_of_date)
     snapshot["symbol"] = snapshot.index
+    # Ranks are ordinal contract fields. Keep missing values nullable while
+    # avoiding CSV values such as "5.0" that integer-oriented report readers
+    # can misrender as rank zero.
+    snapshot["current_rank"] = pd.to_numeric(snapshot["current_rank"], errors="raise").astype("Int64")
     columns = [
         "as_of_date",
         "symbol",
