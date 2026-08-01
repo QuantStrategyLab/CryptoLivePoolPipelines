@@ -8,6 +8,23 @@ import pandas as pd
 from .utils import make_schedule
 
 
+def _make_universe_refresh_schedule(
+    dates: list[pd.Timestamp],
+    frequency: str,
+) -> list[pd.Timestamp]:
+    """Prevent adjacent month-end/next-month snapshots from counting twice."""
+    refresh_dates = make_schedule(dates, frequency)
+    if frequency.lower() == "monthly" and len(refresh_dates) >= 2:
+        previous_refresh = pd.Timestamp(refresh_dates[-2])
+        latest_refresh = pd.Timestamp(refresh_dates[-1])
+        if (
+            latest_refresh.normalize() == previous_refresh.normalize() + pd.Timedelta(days=1)
+            and latest_refresh.month != previous_refresh.month
+        ):
+            refresh_dates.pop(-2)
+    return refresh_dates
+
+
 def resolve_universe_mode(
     config: dict[str, Any],
     universe_mode: str | None = None,
@@ -156,7 +173,7 @@ def build_dynamic_universe(
     )
 
     dates = list(panel.index.get_level_values("date").unique().sort_values())
-    refresh_dates = make_schedule(dates, universe_cfg["refresh_frequency"])
+    refresh_dates = _make_universe_refresh_schedule(dates, universe_cfg["refresh_frequency"])
     date_index = panel.index.get_level_values("date")
     symbol_index = panel.index.get_level_values("symbol")
     panel["in_universe"] = False
