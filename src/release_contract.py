@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,15 @@ REQUIRED_ARTIFACT_MANIFEST_ARTIFACTS = {
     "live_pool_legacy": "live_pool_legacy.json",
 }
 EXPECTED_ARTIFACT_CONTRACT_VERSION = "crypto_live_pool_rotation.live_pool.v1"
+REQUIRED_RUNTIME_EVIDENCE_IDENTITY_FIELDS = (
+    "strategy_profile",
+    "mode",
+    "source_revision",
+    "input_timestamp",
+    "artifact_contract",
+    "artifact_version",
+    "artifacts",
+)
 
 
 def _sha256_file(path: Path) -> str:
@@ -162,6 +172,72 @@ def _normalize_source_project(value: Any, field_label: str, errors: list[str]) -
     return normalized
 
 
+def _is_sha256(value: Any) -> bool:
+    return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{64}", value.strip()))
+
+
+def _validate_runtime_evidence_identity(
+    manifest: dict[str, Any],
+    artifact_manifest: dict[str, Any],
+    *,
+    live_pool_mode: str,
+    live_pool_version: str,
+    errors: list[str],
+) -> None:
+    label = "release_manifest.json runtime_evidence_identity"
+    identity = manifest.get("runtime_evidence_identity")
+    if not isinstance(identity, dict):
+        errors.append(f"{label} must be an object")
+        return
+
+    _append_missing_fields(identity, REQUIRED_RUNTIME_EVIDENCE_IDENTITY_FIELDS, errors, label)
+    if str(identity.get("strategy_profile", "")).strip() != str(
+        artifact_manifest.get("strategy_profile", "")
+    ).strip():
+        errors.append(f"{label} strategy_profile does not match artifact_manifest.json")
+    if str(identity.get("mode", "")).strip() != live_pool_mode:
+        errors.append(f"{label} mode does not match live_pool.json")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("source_revision", "")).strip()):
+        errors.append(f"{label} source_revision must be a 40-character lowercase git SHA")
+
+    input_timestamp = identity.get("input_timestamp")
+    try:
+        timestamp = pd.Timestamp(input_timestamp)
+    except Exception:
+        timestamp = None
+    if not isinstance(input_timestamp, str) or timestamp is None or pd.isna(timestamp) or timestamp.tzinfo is None:
+        errors.append(f"{label} input_timestamp must be a timezone-aware timestamp")
+
+    if str(identity.get("artifact_contract", "")).strip() != str(
+        artifact_manifest.get("contract_version", "")
+    ).strip():
+        errors.append(f"{label} artifact_contract does not match artifact_manifest.json")
+    if str(identity.get("artifact_version", "")).strip() != live_pool_version:
+        errors.append(f"{label} artifact_version does not match live_pool.json version")
+
+    identity_artifacts = identity.get("artifacts")
+    artifact_manifest_artifacts = artifact_manifest.get("artifacts")
+    if not isinstance(identity_artifacts, dict):
+        errors.append(f"{label} artifacts must be an object")
+        return
+    if not isinstance(artifact_manifest_artifacts, dict):
+        return
+    for artifact_name in REQUIRED_ARTIFACT_MANIFEST_ARTIFACTS:
+        identity_entry = identity_artifacts.get(artifact_name)
+        artifact_entry = artifact_manifest_artifacts.get(artifact_name)
+        if not isinstance(identity_entry, dict):
+            errors.append(f"{label} artifacts.{artifact_name} must be an object")
+            continue
+        identity_sha = identity_entry.get("sha256")
+        if not _is_sha256(identity_sha):
+            errors.append(f"{label} artifacts.{artifact_name}.sha256 must be a SHA-256 digest")
+            continue
+        if not isinstance(artifact_entry, dict) or identity_sha.strip() != str(artifact_entry.get("sha256", "")).strip():
+            errors.append(
+                f"{label} artifacts.{artifact_name}.sha256 does not match artifact_manifest.json"
+            )
+
+
 def _coerce_selected_flag(series: pd.Series) -> pd.Series:
     if pd.api.types.is_bool_dtype(series):
         return series.fillna(False)
@@ -221,6 +297,7 @@ def validate_release_outputs(
     max_age_days: int | None = None,
     require_manifest: bool = False,
     require_artifact_manifest: bool = False,
+    require_runtime_evidence_identity: bool = False,
     require_freshness: bool = False,
 ) -> dict[str, Any]:
     output_path = Path(output_dir)
@@ -566,6 +643,15 @@ def validate_release_outputs(
                 errors.append(f"artifact_manifest.json artifacts.{artifact_name}.sha256 must be non-empty")
             elif expected_sha != _sha256_file(resolved_path):
                 errors.append(f"artifact_manifest.json artifacts.{artifact_name}.sha256 does not match file content")
+
+    if require_runtime_evidence_identity and manifest_present and artifact_manifest_present:
+        _validate_runtime_evidence_identity(
+            manifest,
+            artifact_manifest,
+            live_pool_mode=live_pool_mode,
+            live_pool_version=live_pool_version,
+            errors=errors,
+        )
 
     age_days: int | None = None
     if live_pool_as_of_ts is not None:
