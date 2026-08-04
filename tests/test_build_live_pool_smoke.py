@@ -19,7 +19,7 @@ from src.export import (
     export_strategy_artifact_manifest,
     resolve_clean_source_revision,
 )
-from src.pipeline import resolve_scoring_input_timestamp
+from src.pipeline import build_live_pool_outputs, resolve_scoring_input_timestamp
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -117,6 +117,27 @@ class BuildLivePoolSmokeTests(unittest.TestCase):
         self.assertTrue(validation["artifact_manifest_present"])
         self.assertEqual(validation["version"], "2026-03-13-core_major")
         self.assertEqual(validation["pool_size"], 5)
+
+    def test_build_live_pool_rejects_disabled_legacy_before_any_output_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = Path(tmp_dir) / "fresh-output"
+            config = {
+                "paths": {"output_dir": output_dir},
+                "export": {"save_legacy_live_pool": False},
+                "universe": {"live_mode": "core_major", "modes": {"core_major": {}}},
+            }
+
+            with (
+                patch("src.pipeline.prepare_research_panel") as prepare_research_panel,
+                self.assertRaisesRegex(
+                    ValueError,
+                    r"export\.save_legacy_live_pool=false is incompatible with the required four-artifact release contract",
+                ),
+            ):
+                build_live_pool_outputs(config)
+
+            prepare_research_panel.assert_not_called()
+            self.assertFalse(output_dir.exists())
 
     def test_manifest_identity_uses_git_head_and_panel_cutoff_not_environment_or_now(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

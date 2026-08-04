@@ -344,6 +344,12 @@ def build_live_pool_outputs(
     universe_mode: Optional[str] = None,
 ) -> dict[str, Any]:
     """Train on the latest eligible history and export live universe/ranking files."""
+    if config["export"].get("save_legacy_live_pool", True) is False:
+        raise ValueError(
+            "export.save_legacy_live_pool=false is incompatible with the required "
+            "four-artifact release contract."
+        )
+
     logger = get_logger("build_live_pool_outputs")
     resolved_mode, _ = resolve_universe_mode(config, universe_mode=universe_mode, purpose="live")
     logger.info("Building live pool with universe mode '%s'.", resolved_mode)
