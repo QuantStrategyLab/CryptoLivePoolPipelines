@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -16,6 +17,7 @@ from src.publish import (
     build_storage_layout,
     ensure_publish_preflight,
     load_release_artifacts,
+    upload_release_artifacts,
 )
 from src.release_contract import validate_release_outputs
 
@@ -301,6 +303,66 @@ class ReleaseContractValidationTests(unittest.TestCase):
         )
         self.assertEqual(handoff["encoding"], "utf-8")
         self.assertEqual(handoff["utf8_text"].encode("utf-8"), exact_bytes)
+
+    def test_upload_reuses_validated_legacy_snapshot_after_path_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            output_dir = self.build_runtime_identity_outputs(root)
+            artifacts = load_release_artifacts(output_dir, "core_major")
+            settings = PublishSettings(
+                enabled=True,
+                dry_run=False,
+                mode="core_major",
+                project_id="test-project",
+                cloud_bucket="test-bucket",
+                cloud_root_prefix="crypto-live-pool-pipelines",
+                firestore_collection="strategy",
+                firestore_document="CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
+                source_project="crypto-live-pool-pipelines",
+                upload_current_pointer=True,
+            )
+            storage_layout = build_storage_layout(settings, artifacts)
+            firestore_payload = build_firestore_payload(
+                settings,
+                artifacts,
+                storage_layout,
+            )
+            validated_bytes = firestore_payload["live_pool_legacy_exact_bytes"][
+                "utf8_text"
+            ].encode("utf-8")
+            artifacts.live_pool_legacy_path.write_bytes(b'{"mutated": true}\n')
+
+            uploaded: dict[str, bytes] = {}
+
+            class FakeStore:
+                def write_bytes(self, uri: str, payload: bytes) -> None:
+                    uploaded[uri] = payload
+
+            with patch(
+                "quant_platform_kit.cloud.get_object_store",
+                return_value=FakeStore(),
+            ):
+                upload_release_artifacts(
+                    settings,
+                    artifacts,
+                    storage_layout,
+                    live_pool_legacy_exact_bytes=validated_bytes,
+                )
+
+        legacy_objects = storage_layout["objects"]["live_pool_legacy.json"]
+        release_bytes = uploaded[legacy_objects["release_uri"]]
+        current_bytes = uploaded[legacy_objects["current_uri"]]
+        manifest_digest = artifacts.artifact_manifest["artifacts"][
+            "live_pool_legacy"
+        ]["sha256"]
+        identity_digest = artifacts.runtime_evidence_identity["artifacts"][
+            "live_pool_legacy"
+        ]["sha256"]
+        self.assertEqual(release_bytes, validated_bytes)
+        self.assertEqual(current_bytes, validated_bytes)
+        self.assertEqual(hashlib.sha256(validated_bytes).hexdigest(), manifest_digest)
+        self.assertEqual(hashlib.sha256(release_bytes).hexdigest(), manifest_digest)
+        self.assertEqual(identity_digest, manifest_digest)
 
     def test_firestore_payload_rejects_mutated_legacy_bytes_with_unchanged_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

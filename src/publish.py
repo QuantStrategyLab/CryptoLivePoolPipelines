@@ -434,6 +434,8 @@ def upload_release_artifacts(
     settings: PublishSettings,
     artifacts: ReleaseArtifacts,
     storage_layout: dict[str, Any],
+    *,
+    live_pool_legacy_exact_bytes: bytes,
 ) -> None:
     if settings.dry_run:
         return
@@ -462,9 +464,14 @@ def upload_release_artifacts(
             files[opt_file] = opt_path
     for filename, local_path in files.items():
         object_info = storage_layout["objects"][filename]
-        store.write_bytes(object_info["release_uri"], local_path.read_bytes())
+        upload_bytes = (
+            live_pool_legacy_exact_bytes
+            if filename == "live_pool_legacy.json"
+            else local_path.read_bytes()
+        )
+        store.write_bytes(object_info["release_uri"], upload_bytes)
         if settings.upload_current_pointer:
-            store.write_bytes(object_info["current_uri"], local_path.read_bytes())
+            store.write_bytes(object_info["current_uri"], upload_bytes)
 
 
 def publish_firestore_summary(settings: PublishSettings, firestore_payload: dict[str, Any]) -> None:
@@ -514,6 +521,9 @@ def run_release_publish(
     artifacts = load_release_artifacts(config["paths"].output_dir, settings.mode)
     storage_layout = build_storage_layout(settings, artifacts)
     firestore_payload = build_firestore_payload(settings, artifacts, storage_layout)
+    live_pool_legacy_exact_bytes = firestore_payload["live_pool_legacy_exact_bytes"][
+        "utf8_text"
+    ].encode("utf-8")
     manifest = build_release_manifest(settings, artifacts, storage_layout, firestore_payload)
     manifest_path = write_release_manifest(artifacts.output_dir, manifest)
     validation = assert_release_outputs(
@@ -533,8 +543,18 @@ def run_release_publish(
         or firestore_payload.get("runtime_evidence_identity") != artifacts.runtime_evidence_identity
     ):
         raise ValueError("Runtime evidence identity changed before publish.")
+    if (
+        live_pool_legacy_exact_bytes
+        != artifacts.live_pool_legacy_path.read_bytes()
+    ):
+        raise ValueError("Validated live_pool_legacy.json exact bytes changed before publish.")
 
-    upload_release_artifacts(settings, artifacts, storage_layout)
+    upload_release_artifacts(
+        settings,
+        artifacts,
+        storage_layout,
+        live_pool_legacy_exact_bytes=live_pool_legacy_exact_bytes,
+    )
     publish_firestore_summary(settings, firestore_payload)
 
     return {
