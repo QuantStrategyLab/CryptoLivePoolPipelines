@@ -8,7 +8,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.publish import ensure_publish_preflight
+from src.publish import (
+    PublishSettings,
+    build_firestore_payload,
+    build_release_manifest,
+    build_storage_layout,
+    ensure_publish_preflight,
+    load_release_artifacts,
+)
 from src.release_contract import validate_release_outputs
 
 
@@ -139,6 +146,8 @@ class ReleaseContractValidationTests(unittest.TestCase):
                     "artifact_version": version,
                     "artifacts": artifact_manifest["artifacts"],
                 }
+                artifact_manifest["runtime_evidence_identity"] = runtime_evidence_identity
+                write_json(output_dir / "artifact_manifest.json", artifact_manifest)
             write_json(
                 output_dir / "release_manifest.json",
                 {
@@ -162,6 +171,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
                             "symbols": symbols,
                             "symbol_map": symbol_map,
                             "source_project": source_project,
+                            "runtime_evidence_identity": runtime_evidence_identity,
                         },
                     },
                 },
@@ -190,6 +200,56 @@ class ReleaseContractValidationTests(unittest.TestCase):
         self.assertEqual(validation["version"], "2026-03-13-core_major")
         self.assertEqual(validation["pool_size"], 5)
         self.assertEqual(validation["age_days"], 1)
+
+    def test_identity_is_canonical_across_artifact_release_and_firestore(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.build_outputs(
+                root,
+                include_manifest=True,
+                include_runtime_evidence_identity=True,
+            )
+            output_dir = root / "data" / "output"
+            artifacts = load_release_artifacts(output_dir, "core_major")
+            settings = PublishSettings(
+                enabled=False,
+                dry_run=True,
+                mode="core_major",
+                project_id=None,
+                cloud_bucket=None,
+                cloud_root_prefix="crypto-live-pool-pipelines",
+                firestore_collection="strategy",
+                firestore_document="CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
+                source_project="crypto-live-pool-pipelines",
+                upload_current_pointer=False,
+            )
+            storage_layout = build_storage_layout(settings, artifacts)
+            firestore_payload = build_firestore_payload(settings, artifacts, storage_layout)
+            release_manifest = build_release_manifest(
+                settings,
+                artifacts,
+                storage_layout,
+                firestore_payload,
+            )
+
+        identity = artifacts.artifact_manifest["runtime_evidence_identity"]
+        self.assertEqual(release_manifest["runtime_evidence_identity"], identity)
+        self.assertEqual(firestore_payload["runtime_evidence_identity"], identity)
+
+    def test_artifact_byte_mutation_breaks_runtime_identity_before_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.build_outputs(
+                root,
+                include_manifest=True,
+                include_runtime_evidence_identity=True,
+            )
+            output_dir = root / "data" / "output"
+            with (output_dir / "latest_ranking.csv").open("ab") as handle:
+                handle.write(b"\n")
+
+            with self.assertRaises(ValueError):
+                load_release_artifacts(output_dir, "core_major")
 
     def test_validate_release_outputs_requires_runtime_evidence_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

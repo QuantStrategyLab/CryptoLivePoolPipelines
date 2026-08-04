@@ -388,6 +388,7 @@ def build_live_pool_outputs(
     else:
         panel = panel.join(result.predictions, how="left")
     panel = build_final_scores(panel, config)
+    input_timestamp = resolve_scoring_input_timestamp(panel, score_mask)
 
     output_dir = config["paths"].output_dir
     export_latest_universe(panel, output_dir, latest_date)
@@ -418,6 +419,7 @@ def build_live_pool_outputs(
         output_dir=output_dir,
         live_pool=live_payload,
         source_project=source_project,
+        input_timestamp=input_timestamp,
     )
 
     # Compute and export BTC cycle indicators for crypto DCA strategies
@@ -455,3 +457,14 @@ def build_live_pool_outputs(
         "ml_backend": result.ml_backend,
         "universe_mode": resolved_mode,
     }
+
+
+def resolve_scoring_input_timestamp(panel: pd.DataFrame, score_mask: Any) -> pd.Timestamp:
+    """Return the maximum date among rows admitted to final scoring/export."""
+    scoring_rows = panel.loc[score_mask]
+    if scoring_rows.empty:
+        raise ValueError("No panel rows were admitted to final scoring/export.")
+    dates = pd.to_datetime(scoring_rows.index.get_level_values("date"), errors="coerce")
+    if dates.isna().any():
+        raise ValueError("Final scoring/export rows contain an invalid date.")
+    return pd.Timestamp(dates.max()).normalize()

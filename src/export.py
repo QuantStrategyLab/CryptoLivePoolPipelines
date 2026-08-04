@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+import re
+import subprocess
 from typing import Any
 
 import pandas as pd
@@ -13,6 +15,12 @@ from .utils import date_to_str, write_json
 DEFAULT_STRATEGY_PROFILE = "crypto_live_pool_rotation"
 DEFAULT_ARTIFACT_TYPE = "live_pool"
 DEFAULT_ARTIFACT_CONTRACT_VERSION = "crypto_live_pool_rotation.live_pool.v1"
+REQUIRED_IDENTITY_ARTIFACTS = (
+    "live_pool",
+    "live_pool_legacy",
+    "latest_ranking",
+    "latest_universe",
+)
 
 
 def _sha256_file(path: Path) -> str:
@@ -21,6 +29,49 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def resolve_clean_source_revision(repo_root: Path | None = None) -> str:
+    """Resolve the commit whose clean tracked tree is executing this producer."""
+    root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[1]
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD^{commit}"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "diff", "--quiet", "HEAD", "--"],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "diff", "--cached", "--quiet", "HEAD", "--"],
+            cwd=root,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError("Cannot bind artifact bytes to a clean producer commit.") from exc
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise RuntimeError("Producer HEAD did not resolve to a lowercase 40-character commit.")
+    return revision
+
+
+def _normalize_input_timestamp(value: Any, *, as_of_date: str) -> str:
+    timestamp = pd.Timestamp(value)
+    if pd.isna(timestamp):
+        raise ValueError("input_timestamp must be a finite panel date.")
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize("UTC")
+    else:
+        timestamp = timestamp.tz_convert("UTC")
+    timestamp = timestamp.normalize()
+    expected = pd.Timestamp(as_of_date).tz_localize("UTC")
+    if timestamp != expected:
+        raise ValueError("input_timestamp must equal live_pool.as_of_date at UTC midnight.")
+    return timestamp.strftime("%Y-%m-%dT00:00:00Z")
 
 
 def export_latest_universe(panel: pd.DataFrame, output_dir: str | Any, as_of_date: pd.Timestamp) -> dict[str, Any]:
@@ -170,6 +221,7 @@ def build_strategy_artifact_manifest(
     artifact_type: str = DEFAULT_ARTIFACT_TYPE,
     contract_version: str = DEFAULT_ARTIFACT_CONTRACT_VERSION,
     source_project: str = "crypto-live-pool-pipelines",
+    input_timestamp: Any,
     generated_at: Any | None = None,
 ) -> dict[str, Any]:
     """Build the profile-aware artifact manifest consumed by downstream runtimes."""
@@ -190,8 +242,8 @@ def build_strategy_artifact_manifest(
     artifacts = {}
     for artifact_name, filename in artifact_files.items():
         path = output_path / filename
-        if not path.exists():
-            continue
+        if not path.is_file():
+            raise FileNotFoundError(f"Required identity artifact is missing: {path}")
         artifacts[artifact_name] = {
             "path": filename,
             "sha256": _sha256_file(path),
@@ -209,6 +261,16 @@ def build_strategy_artifact_manifest(
     mode = str(live_pool.get("mode", "")).strip()
     version = str(live_pool.get("version", "")).strip()
     source_project_text = str(live_pool.get("source_project") or source_project)
+    input_timestamp_text = _normalize_input_timestamp(input_timestamp, as_of_date=as_of_date)
+    runtime_evidence_identity = {
+        "strategy_profile": str(strategy_profile),
+        "mode": mode,
+        "source_revision": resolve_clean_source_revision(),
+        "input_timestamp": input_timestamp_text,
+        "artifact_contract": str(contract_version),
+        "artifact_version": version,
+        "artifacts": {name: dict(artifacts[name]) for name in REQUIRED_IDENTITY_ARTIFACTS},
+    }
     return {
         "manifest_type": "strategy_artifact",
         "contract_version": str(contract_version),
@@ -225,6 +287,7 @@ def build_strategy_artifact_manifest(
         "generated_at": generated_at_text,
         "primary_artifact": "live_pool",
         "artifacts": artifacts,
+        "runtime_evidence_identity": runtime_evidence_identity,
     }
 
 
@@ -250,6 +313,7 @@ def export_strategy_artifact_manifest(
     artifact_type: str = DEFAULT_ARTIFACT_TYPE,
     contract_version: str = DEFAULT_ARTIFACT_CONTRACT_VERSION,
     source_project: str = "crypto-live-pool-pipelines",
+    input_timestamp: Any,
 ) -> dict[str, Any]:
     manifest = build_strategy_artifact_manifest(
         output_dir=output_dir,
@@ -258,6 +322,7 @@ def export_strategy_artifact_manifest(
         artifact_type=artifact_type,
         contract_version=contract_version,
         source_project=source_project,
+        input_timestamp=input_timestamp,
     )
     write_json(Path(output_dir) / "artifact_manifest.json", manifest)
     return manifest
