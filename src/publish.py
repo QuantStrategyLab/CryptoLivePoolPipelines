@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
+import re
 from typing import Any
 
 import pandas as pd
@@ -53,6 +56,7 @@ class ReleaseArtifacts:
     live_pool: dict[str, Any]
     live_pool_legacy: dict[str, Any]
     artifact_manifest: dict[str, Any]
+    runtime_evidence_identity: dict[str, Any]
 
 
 def parse_bool(value: Any, default: bool = False) -> bool:
@@ -117,6 +121,59 @@ def _require_file(path: Path) -> None:
         raise FileNotFoundError(f"Required release artifact is missing: {path}")
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_runtime_evidence_identity(
+    *,
+    identity: Any,
+    artifact_manifest: dict[str, Any],
+    live_pool: dict[str, Any],
+    paths: dict[str, Path],
+) -> dict[str, Any]:
+    if not isinstance(identity, dict):
+        raise ValueError("artifact_manifest.json runtime_evidence_identity must be an object.")
+    expected_artifacts = {
+        "live_pool": paths["live_pool.json"],
+        "live_pool_legacy": paths["live_pool_legacy.json"],
+        "latest_ranking": paths["latest_ranking.csv"],
+        "latest_universe": paths["latest_universe.json"],
+    }
+    manifest_artifacts = artifact_manifest.get("artifacts")
+    identity_artifacts = identity.get("artifacts")
+    if not isinstance(manifest_artifacts, dict) or set(manifest_artifacts) != set(expected_artifacts):
+        raise ValueError("artifact_manifest.json must bind exactly the four release artifacts.")
+    if not isinstance(identity_artifacts, dict) or identity_artifacts != manifest_artifacts:
+        raise ValueError("runtime_evidence_identity artifacts must equal artifact_manifest.json artifacts.")
+    for name, path in expected_artifacts.items():
+        entry = manifest_artifacts.get(name)
+        if (
+            not isinstance(entry, dict)
+            or entry.get("path") != path.name
+            or entry.get("sha256") != _sha256_file(path)
+        ):
+            raise ValueError(f"Runtime identity digest mismatch for {name}.")
+    if identity.get("strategy_profile") != artifact_manifest.get("strategy_profile"):
+        raise ValueError("Runtime identity strategy_profile mismatch.")
+    if identity.get("mode") != live_pool.get("mode"):
+        raise ValueError("Runtime identity mode mismatch.")
+    if identity.get("artifact_contract") != artifact_manifest.get("contract_version"):
+        raise ValueError("Runtime identity artifact_contract mismatch.")
+    if identity.get("artifact_version") != live_pool.get("version"):
+        raise ValueError("Runtime identity artifact_version mismatch.")
+    if not re.fullmatch(r"[0-9a-f]{40}", str(identity.get("source_revision", ""))):
+        raise ValueError("Runtime identity source_revision is invalid.")
+    expected_timestamp = f"{live_pool.get('as_of_date')}T00:00:00Z"
+    if identity.get("input_timestamp") != expected_timestamp:
+        raise ValueError("Runtime identity input_timestamp mismatch.")
+    return deepcopy(identity)
+
+
 def load_release_artifacts(output_dir: Path | str, mode: str) -> ReleaseArtifacts:
     output_path = Path(output_dir)
     paths = {name: output_path / name for name in REQUIRED_OUTPUT_FILES}
@@ -147,6 +204,12 @@ def load_release_artifacts(output_dir: Path | str, mode: str) -> ReleaseArtifact
         raise ValueError("live_pool_legacy.json must contain a non-empty symbols mapping.")
 
     version = build_release_version(as_of_date, mode)
+    runtime_evidence_identity = _validate_runtime_evidence_identity(
+        identity=artifact_manifest.get("runtime_evidence_identity"),
+        artifact_manifest=artifact_manifest,
+        live_pool=live_pool,
+        paths=paths,
+    )
     return ReleaseArtifacts(
         as_of_date=as_of_date,
         version=version,
@@ -161,6 +224,7 @@ def load_release_artifacts(output_dir: Path | str, mode: str) -> ReleaseArtifact
         live_pool=live_pool,
         live_pool_legacy=live_pool_legacy,
         artifact_manifest=artifact_manifest,
+        runtime_evidence_identity=runtime_evidence_identity,
     )
 
 
@@ -260,6 +324,7 @@ def build_firestore_payload(
         "artifact_contract_version": str(artifacts.artifact_manifest.get("contract_version", "")),
         "generated_at": generated_at,
         "source_project": settings.source_project,
+        "runtime_evidence_identity": deepcopy(artifacts.runtime_evidence_identity),
     }
 
 
@@ -269,6 +334,8 @@ def build_release_manifest(
     storage_layout: dict[str, Any],
     firestore_payload: dict[str, Any],
 ) -> dict[str, Any]:
+    if firestore_payload.get("runtime_evidence_identity") != artifacts.runtime_evidence_identity:
+        raise ValueError("Firestore runtime_evidence_identity must equal artifact_manifest.json.")
     return {
         "version": artifacts.version,
         "mode": settings.mode,
@@ -284,6 +351,7 @@ def build_release_manifest(
             "live_pool_legacy": storage_layout["objects"]["live_pool_legacy.json"],
             "artifact_manifest": storage_layout["objects"]["artifact_manifest.json"],
         },
+        "runtime_evidence_identity": deepcopy(artifacts.runtime_evidence_identity),
         "firestore": {
             "collection": settings.firestore_collection,
             "document": settings.firestore_document,
@@ -392,8 +460,15 @@ def run_release_publish(
         max_age_days=max_age_days,
         require_manifest=True,
         require_artifact_manifest=True,
+        require_runtime_evidence_identity=True,
         require_freshness=require_freshness,
     )
+    artifacts = load_release_artifacts(artifacts.output_dir, settings.mode)
+    if (
+        manifest.get("runtime_evidence_identity") != artifacts.runtime_evidence_identity
+        or firestore_payload.get("runtime_evidence_identity") != artifacts.runtime_evidence_identity
+    ):
+        raise ValueError("Runtime evidence identity changed before publish.")
 
     upload_release_artifacts(settings, artifacts, storage_layout)
     publish_firestore_summary(settings, firestore_payload)
