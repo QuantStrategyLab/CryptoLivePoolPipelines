@@ -337,10 +337,51 @@ class ReleaseContractValidationTests(unittest.TestCase):
                         storage_layout,
                     )
 
+    def test_firestore_payload_rejects_pool_size_or_source_project_mismatch(self) -> None:
+        cases = {
+            "pool_size_mismatch": ("pool_size", 4),
+            "pool_size_missing": ("pool_size", None),
+            "source_project_mismatch": ("source_project", "wrong-source"),
+            "source_project_missing": ("source_project", None),
+        }
+        for label, (field, value) in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp_dir:
+                root = Path(tmp_dir)
+                output_dir = self.build_runtime_identity_outputs(root)
+                legacy_path = output_dir / "live_pool_legacy.json"
+                legacy_payload = json.loads(legacy_path.read_text(encoding="utf-8"))
+                if value is None:
+                    legacy_payload.pop(field)
+                else:
+                    legacy_payload[field] = value
+                write_json(legacy_path, legacy_payload)
+
+                manifest_path = output_dir / "artifact_manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                digest = sha256_file(legacy_path)
+                manifest["artifacts"]["live_pool_legacy"]["sha256"] = digest
+                manifest["runtime_evidence_identity"]["artifacts"][
+                    "live_pool_legacy"
+                ]["sha256"] = digest
+                write_json(manifest_path, manifest)
+
+                artifacts, settings, storage_layout = self.load_publish_context(
+                    output_dir
+                )
+                with self.assertRaisesRegex(ValueError, "convenience fields"):
+                    build_firestore_payload(
+                        settings,
+                        artifacts,
+                        storage_layout,
+                    )
+
     def test_firestore_payload_rejects_invalid_legacy_artifact_bytes(self) -> None:
         cases = {
             "invalid_utf8": (b"\xff", "valid UTF-8"),
             "invalid_json": (b"{", "valid JSON"),
+            "nan": (b'{"value": NaN}', "valid JSON"),
+            "infinity": (b'{"value": Infinity}', "valid JSON"),
+            "negative_infinity": (b'{"value": -Infinity}', "valid JSON"),
             "non_object": (b"[]", "JSON object"),
         }
         for label, (invalid_bytes, expected_error) in cases.items():

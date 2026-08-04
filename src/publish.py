@@ -134,6 +134,10 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _reject_non_standard_json_constant(value: str) -> None:
+    raise ValueError(f"Non-standard JSON constant is not allowed: {value}")
+
+
 def _validate_runtime_evidence_identity(
     *,
     identity: Any,
@@ -315,8 +319,11 @@ def build_firestore_payload(
     except UnicodeDecodeError as exc:
         raise ValueError("live_pool_legacy.json exact bytes must be valid UTF-8.") from exc
     try:
-        exact_payload = json.loads(exact_text)
-    except json.JSONDecodeError as exc:
+        exact_payload = json.loads(
+            exact_text,
+            parse_constant=_reject_non_standard_json_constant,
+        )
+    except ValueError as exc:
         raise ValueError("live_pool_legacy.json exact bytes must contain valid JSON.") from exc
     if not isinstance(exact_payload, dict):
         raise ValueError("live_pool_legacy.json exact bytes must contain a JSON object.")
@@ -343,6 +350,12 @@ def build_firestore_payload(
         or exact_payload.get("symbols") != artifacts.live_pool_legacy.get("symbols")
         or exact_payload.get("symbol_map")
         != artifacts.live_pool_legacy.get("symbol_map")
+        or exact_payload.get("pool_size")
+        != artifacts.live_pool_legacy.get("pool_size")
+        or exact_payload.get("pool_size") != artifacts.live_pool.get("pool_size")
+        or exact_payload.get("source_project")
+        != artifacts.live_pool_legacy.get("source_project")
+        or exact_payload.get("source_project") != settings.source_project
         or list(exact_payload.get("symbols", {})) != symbols
         or exact_payload.get("symbol_map") != symbol_map
     ):
