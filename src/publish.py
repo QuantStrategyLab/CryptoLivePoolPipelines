@@ -4,6 +4,7 @@ import os
 from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
+import json
 from pathlib import Path
 import re
 from typing import Any
@@ -24,6 +25,10 @@ REQUIRED_OUTPUT_FILES = (
 
 OPTIONAL_OUTPUT_FILES = (
     "btc_cycle_indicators.json",
+)
+
+LIVE_POOL_LEGACY_EXACT_BYTES_CONTRACT_VERSION = (
+    "qsl.crypto_live_pool_legacy_exact_bytes.v1"
 )
 
 
@@ -127,6 +132,10 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _reject_non_standard_json_constant(value: str) -> None:
+    raise ValueError(f"Non-standard JSON constant is not allowed: {value}")
 
 
 def _validate_runtime_evidence_identity(
@@ -304,6 +313,56 @@ def build_firestore_payload(
 ) -> dict[str, Any]:
     symbol_map = dict(artifacts.live_pool_legacy["symbols"])
     symbols = list(symbol_map.keys())
+    exact_bytes = artifacts.live_pool_legacy_path.read_bytes()
+    try:
+        exact_text = exact_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("live_pool_legacy.json exact bytes must be valid UTF-8.") from exc
+    try:
+        exact_payload = json.loads(
+            exact_text,
+            parse_constant=_reject_non_standard_json_constant,
+        )
+    except ValueError as exc:
+        raise ValueError("live_pool_legacy.json exact bytes must contain valid JSON.") from exc
+    if not isinstance(exact_payload, dict):
+        raise ValueError("live_pool_legacy.json exact bytes must contain a JSON object.")
+
+    exact_digest = hashlib.sha256(exact_bytes).hexdigest()
+    manifest_entry = artifacts.artifact_manifest.get("artifacts", {}).get(
+        "live_pool_legacy", {}
+    )
+    identity_entry = artifacts.runtime_evidence_identity.get("artifacts", {}).get(
+        "live_pool_legacy", {}
+    )
+    if (
+        manifest_entry.get("sha256") != exact_digest
+        or identity_entry.get("sha256") != exact_digest
+    ):
+        raise ValueError(
+            "live_pool_legacy.json exact bytes digest mismatch with artifact manifest or runtime identity."
+        )
+
+    if (
+        exact_payload.get("as_of_date") != artifacts.as_of_date
+        or exact_payload.get("version") != artifacts.version
+        or exact_payload.get("mode") != settings.mode
+        or exact_payload.get("symbols") != artifacts.live_pool_legacy.get("symbols")
+        or exact_payload.get("symbol_map")
+        != artifacts.live_pool_legacy.get("symbol_map")
+        or exact_payload.get("pool_size")
+        != artifacts.live_pool_legacy.get("pool_size")
+        or exact_payload.get("pool_size") != artifacts.live_pool.get("pool_size")
+        or exact_payload.get("source_project")
+        != artifacts.live_pool_legacy.get("source_project")
+        or exact_payload.get("source_project") != settings.source_project
+        or list(exact_payload.get("symbols", {})) != symbols
+        or exact_payload.get("symbol_map") != symbol_map
+    ):
+        raise ValueError(
+            "live_pool_legacy.json exact bytes do not match Firestore convenience fields."
+        )
+
     generated_at = pd.Timestamp.now(tz="UTC").isoformat()
     return {
         "as_of_date": artifacts.as_of_date,
@@ -325,6 +384,11 @@ def build_firestore_payload(
         "generated_at": generated_at,
         "source_project": settings.source_project,
         "runtime_evidence_identity": deepcopy(artifacts.runtime_evidence_identity),
+        "live_pool_legacy_exact_bytes": {
+            "contract_version": LIVE_POOL_LEGACY_EXACT_BYTES_CONTRACT_VERSION,
+            "encoding": "utf-8",
+            "utf8_text": exact_text,
+        },
     }
 
 
@@ -370,6 +434,8 @@ def upload_release_artifacts(
     settings: PublishSettings,
     artifacts: ReleaseArtifacts,
     storage_layout: dict[str, Any],
+    *,
+    live_pool_legacy_exact_bytes: bytes,
 ) -> None:
     if settings.dry_run:
         return
@@ -398,9 +464,14 @@ def upload_release_artifacts(
             files[opt_file] = opt_path
     for filename, local_path in files.items():
         object_info = storage_layout["objects"][filename]
-        store.write_bytes(object_info["release_uri"], local_path.read_bytes())
+        upload_bytes = (
+            live_pool_legacy_exact_bytes
+            if filename == "live_pool_legacy.json"
+            else local_path.read_bytes()
+        )
+        store.write_bytes(object_info["release_uri"], upload_bytes)
         if settings.upload_current_pointer:
-            store.write_bytes(object_info["current_uri"], local_path.read_bytes())
+            store.write_bytes(object_info["current_uri"], upload_bytes)
 
 
 def publish_firestore_summary(settings: PublishSettings, firestore_payload: dict[str, Any]) -> None:
@@ -450,6 +521,9 @@ def run_release_publish(
     artifacts = load_release_artifacts(config["paths"].output_dir, settings.mode)
     storage_layout = build_storage_layout(settings, artifacts)
     firestore_payload = build_firestore_payload(settings, artifacts, storage_layout)
+    live_pool_legacy_exact_bytes = firestore_payload["live_pool_legacy_exact_bytes"][
+        "utf8_text"
+    ].encode("utf-8")
     manifest = build_release_manifest(settings, artifacts, storage_layout, firestore_payload)
     manifest_path = write_release_manifest(artifacts.output_dir, manifest)
     validation = assert_release_outputs(
@@ -469,8 +543,18 @@ def run_release_publish(
         or firestore_payload.get("runtime_evidence_identity") != artifacts.runtime_evidence_identity
     ):
         raise ValueError("Runtime evidence identity changed before publish.")
+    if (
+        live_pool_legacy_exact_bytes
+        != artifacts.live_pool_legacy_path.read_bytes()
+    ):
+        raise ValueError("Validated live_pool_legacy.json exact bytes changed before publish.")
 
-    upload_release_artifacts(settings, artifacts, storage_layout)
+    upload_release_artifacts(
+        settings,
+        artifacts,
+        storage_layout,
+        live_pool_legacy_exact_bytes=live_pool_legacy_exact_bytes,
+    )
     publish_firestore_summary(settings, firestore_payload)
 
     return {

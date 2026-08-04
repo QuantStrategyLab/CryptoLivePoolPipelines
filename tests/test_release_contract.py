@@ -5,16 +5,19 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
 from src.publish import (
     PublishSettings,
+    ReleaseArtifacts,
     build_firestore_payload,
     build_release_manifest,
     build_storage_layout,
     ensure_publish_preflight,
     load_release_artifacts,
+    upload_release_artifacts,
 )
 from src.release_contract import validate_release_outputs
 
@@ -29,6 +32,21 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def build_publish_settings() -> PublishSettings:
+    return PublishSettings(
+        enabled=False,
+        dry_run=True,
+        mode="core_major",
+        project_id=None,
+        cloud_bucket=None,
+        cloud_root_prefix="crypto-live-pool-pipelines",
+        firestore_collection="strategy",
+        firestore_document="CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
+        source_project="crypto-live-pool-pipelines",
+        upload_current_pointer=False,
+    )
 
 
 class ReleaseContractValidationTests(unittest.TestCase):
@@ -177,6 +195,21 @@ class ReleaseContractValidationTests(unittest.TestCase):
                 },
             )
 
+    def build_runtime_identity_outputs(self, root: Path) -> Path:
+        self.build_outputs(
+            root,
+            include_manifest=True,
+            include_runtime_evidence_identity=True,
+        )
+        return root / "data" / "output"
+
+    def load_publish_context(
+        self, output_dir: Path
+    ) -> tuple[ReleaseArtifacts, PublishSettings, dict[str, object]]:
+        artifacts = load_release_artifacts(output_dir, "core_major")
+        settings = build_publish_settings()
+        return artifacts, settings, build_storage_layout(settings, artifacts)
+
     def test_validate_release_outputs_accepts_consistent_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -235,6 +268,211 @@ class ReleaseContractValidationTests(unittest.TestCase):
         identity = artifacts.artifact_manifest["runtime_evidence_identity"]
         self.assertEqual(release_manifest["runtime_evidence_identity"], identity)
         self.assertEqual(firestore_payload["runtime_evidence_identity"], identity)
+
+    def test_firestore_payload_preserves_exact_legacy_artifact_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            output_dir = self.build_runtime_identity_outputs(root)
+            legacy_path = output_dir / "live_pool_legacy.json"
+            legacy_payload = json.loads(legacy_path.read_text(encoding="utf-8"))
+            exact_bytes = ("\n" + json.dumps(legacy_payload, separators=(", ", ": ")) + "\n").encode(
+                "utf-8"
+            )
+            legacy_path.write_bytes(exact_bytes)
+
+            manifest_path = output_dir / "artifact_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            exact_digest = hashlib.sha256(exact_bytes).hexdigest()
+            manifest["artifacts"]["live_pool_legacy"]["sha256"] = exact_digest
+            manifest["runtime_evidence_identity"]["artifacts"]["live_pool_legacy"][
+                "sha256"
+            ] = exact_digest
+            write_json(manifest_path, manifest)
+
+            artifacts, settings, storage_layout = self.load_publish_context(output_dir)
+            firestore_payload = build_firestore_payload(
+                settings,
+                artifacts,
+                storage_layout,
+            )
+
+        handoff = firestore_payload["live_pool_legacy_exact_bytes"]
+        self.assertEqual(
+            handoff["contract_version"],
+            "qsl.crypto_live_pool_legacy_exact_bytes.v1",
+        )
+        self.assertEqual(handoff["encoding"], "utf-8")
+        self.assertEqual(handoff["utf8_text"].encode("utf-8"), exact_bytes)
+
+    def test_upload_reuses_validated_legacy_snapshot_after_path_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            output_dir = self.build_runtime_identity_outputs(root)
+            artifacts = load_release_artifacts(output_dir, "core_major")
+            settings = PublishSettings(
+                enabled=True,
+                dry_run=False,
+                mode="core_major",
+                project_id="test-project",
+                cloud_bucket="test-bucket",
+                cloud_root_prefix="crypto-live-pool-pipelines",
+                firestore_collection="strategy",
+                firestore_document="CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
+                source_project="crypto-live-pool-pipelines",
+                upload_current_pointer=True,
+            )
+            storage_layout = build_storage_layout(settings, artifacts)
+            firestore_payload = build_firestore_payload(
+                settings,
+                artifacts,
+                storage_layout,
+            )
+            validated_bytes = firestore_payload["live_pool_legacy_exact_bytes"][
+                "utf8_text"
+            ].encode("utf-8")
+            artifacts.live_pool_legacy_path.write_bytes(b'{"mutated": true}\n')
+
+            uploaded: dict[str, bytes] = {}
+
+            class FakeStore:
+                def write_bytes(self, uri: str, payload: bytes) -> None:
+                    uploaded[uri] = payload
+
+            with patch(
+                "quant_platform_kit.cloud.get_object_store",
+                return_value=FakeStore(),
+            ):
+                upload_release_artifacts(
+                    settings,
+                    artifacts,
+                    storage_layout,
+                    live_pool_legacy_exact_bytes=validated_bytes,
+                )
+
+        legacy_objects = storage_layout["objects"]["live_pool_legacy.json"]
+        release_bytes = uploaded[legacy_objects["release_uri"]]
+        current_bytes = uploaded[legacy_objects["current_uri"]]
+        manifest_digest = artifacts.artifact_manifest["artifacts"][
+            "live_pool_legacy"
+        ]["sha256"]
+        identity_digest = artifacts.runtime_evidence_identity["artifacts"][
+            "live_pool_legacy"
+        ]["sha256"]
+        self.assertEqual(release_bytes, validated_bytes)
+        self.assertEqual(current_bytes, validated_bytes)
+        self.assertEqual(hashlib.sha256(validated_bytes).hexdigest(), manifest_digest)
+        self.assertEqual(hashlib.sha256(release_bytes).hexdigest(), manifest_digest)
+        self.assertEqual(identity_digest, manifest_digest)
+
+    def test_firestore_payload_rejects_mutated_legacy_bytes_with_unchanged_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            output_dir = self.build_runtime_identity_outputs(root)
+            artifacts, settings, storage_layout = self.load_publish_context(output_dir)
+            with artifacts.live_pool_legacy_path.open("ab") as handle:
+                handle.write(b"\n")
+
+            with self.assertRaisesRegex(ValueError, "digest mismatch"):
+                build_firestore_payload(
+                    settings,
+                    artifacts,
+                    storage_layout,
+                )
+
+    def test_firestore_payload_rejects_top_level_convenience_field_mismatch(self) -> None:
+        for field in ("symbols", "symbol_map"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp_dir:
+                root = Path(tmp_dir)
+                output_dir = self.build_runtime_identity_outputs(root)
+                artifacts, settings, storage_layout = self.load_publish_context(output_dir)
+                if field == "symbols":
+                    artifacts.live_pool_legacy[field].pop("TRXUSDT")
+                else:
+                    artifacts.live_pool_legacy[field]["TRXUSDT"] = {
+                        "base_asset": "MISMATCH"
+                    }
+
+                with self.assertRaisesRegex(ValueError, "convenience fields"):
+                    build_firestore_payload(
+                        settings,
+                        artifacts,
+                        storage_layout,
+                    )
+
+    def test_firestore_payload_rejects_pool_size_or_source_project_mismatch(self) -> None:
+        cases = {
+            "pool_size_mismatch": ("pool_size", 4),
+            "pool_size_missing": ("pool_size", None),
+            "source_project_mismatch": ("source_project", "wrong-source"),
+            "source_project_missing": ("source_project", None),
+        }
+        for label, (field, value) in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp_dir:
+                root = Path(tmp_dir)
+                output_dir = self.build_runtime_identity_outputs(root)
+                legacy_path = output_dir / "live_pool_legacy.json"
+                legacy_payload = json.loads(legacy_path.read_text(encoding="utf-8"))
+                if value is None:
+                    legacy_payload.pop(field)
+                else:
+                    legacy_payload[field] = value
+                write_json(legacy_path, legacy_payload)
+
+                manifest_path = output_dir / "artifact_manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                digest = sha256_file(legacy_path)
+                manifest["artifacts"]["live_pool_legacy"]["sha256"] = digest
+                manifest["runtime_evidence_identity"]["artifacts"][
+                    "live_pool_legacy"
+                ]["sha256"] = digest
+                write_json(manifest_path, manifest)
+
+                artifacts, settings, storage_layout = self.load_publish_context(
+                    output_dir
+                )
+                with self.assertRaisesRegex(ValueError, "convenience fields"):
+                    build_firestore_payload(
+                        settings,
+                        artifacts,
+                        storage_layout,
+                    )
+
+    def test_firestore_payload_rejects_invalid_legacy_artifact_bytes(self) -> None:
+        cases = {
+            "invalid_utf8": (b"\xff", "valid UTF-8"),
+            "invalid_json": (b"{", "valid JSON"),
+            "nan": (b'{"value": NaN}', "valid JSON"),
+            "infinity": (b'{"value": Infinity}', "valid JSON"),
+            "negative_infinity": (b'{"value": -Infinity}', "valid JSON"),
+            "non_object": (b"[]", "JSON object"),
+        }
+        for label, (invalid_bytes, expected_error) in cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp_dir:
+                root = Path(tmp_dir)
+                output_dir = self.build_runtime_identity_outputs(root)
+                artifacts, settings, storage_layout = self.load_publish_context(output_dir)
+                artifacts.live_pool_legacy_path.write_bytes(invalid_bytes)
+
+                with self.assertRaisesRegex(ValueError, expected_error):
+                    build_firestore_payload(
+                        settings,
+                        artifacts,
+                        storage_layout,
+                    )
+
+    def test_firestore_payload_rejects_missing_legacy_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            output_dir = self.build_runtime_identity_outputs(root)
+            artifacts, settings, storage_layout = self.load_publish_context(output_dir)
+            artifacts.live_pool_legacy_path.unlink()
+
+            with self.assertRaises(FileNotFoundError):
+                build_firestore_payload(
+                    settings,
+                    artifacts,
+                    storage_layout,
+                )
 
     def test_artifact_byte_mutation_breaks_runtime_identity_before_publish(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
