@@ -33,6 +33,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
         mode: str = "core_major",
         source_project: str = "crypto-live-pool-pipelines",
         include_manifest: bool = False,
+        include_runtime_evidence_identity: bool = False,
     ) -> None:
         output_dir = root / "data" / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -124,6 +125,20 @@ class ReleaseContractValidationTests(unittest.TestCase):
         )
 
         if include_manifest:
+            runtime_evidence_identity = {}
+            if include_runtime_evidence_identity:
+                artifact_manifest = json.loads(
+                    (output_dir / "artifact_manifest.json").read_text(encoding="utf-8")
+                )
+                runtime_evidence_identity = {
+                    "strategy_profile": "crypto_live_pool_rotation",
+                    "mode": mode,
+                    "source_revision": "a" * 40,
+                    "input_timestamp": "2026-03-13T00:00:00Z",
+                    "artifact_contract": artifact_manifest["contract_version"],
+                    "artifact_version": version,
+                    "artifacts": artifact_manifest["artifacts"],
+                }
             write_json(
                 output_dir / "release_manifest.json",
                 {
@@ -135,6 +150,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
                     "release_prefix": f"crypto-live-pool-pipelines/releases/{version}",
                     "current_prefix": "crypto-live-pool-pipelines/current",
                     "artifacts": {},
+                    "runtime_evidence_identity": runtime_evidence_identity,
                     "firestore": {
                         "collection": "strategy",
                         "document": "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
@@ -174,6 +190,56 @@ class ReleaseContractValidationTests(unittest.TestCase):
         self.assertEqual(validation["version"], "2026-03-13-core_major")
         self.assertEqual(validation["pool_size"], 5)
         self.assertEqual(validation["age_days"], 1)
+
+    def test_validate_release_outputs_requires_runtime_evidence_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.build_outputs(
+                root,
+                include_manifest=True,
+                include_runtime_evidence_identity=True,
+            )
+
+            validation = validate_release_outputs(
+                root / "data" / "output",
+                require_manifest=True,
+                require_artifact_manifest=True,
+                require_runtime_evidence_identity=True,
+            )
+
+        self.assertTrue(validation["ok"])
+
+    def test_validate_release_outputs_rejects_incomplete_or_mismatched_runtime_evidence_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.build_outputs(
+                root,
+                include_manifest=True,
+                include_runtime_evidence_identity=True,
+            )
+            manifest_path = root / "data" / "output" / "release_manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            identity = manifest["runtime_evidence_identity"]
+            identity.pop("source_revision")
+            identity["artifacts"]["live_pool"]["sha256"] = "b" * 64
+            write_json(manifest_path, manifest)
+
+            validation = validate_release_outputs(
+                root / "data" / "output",
+                require_manifest=True,
+                require_artifact_manifest=True,
+                require_runtime_evidence_identity=True,
+            )
+
+        self.assertFalse(validation["ok"])
+        self.assertIn(
+            "release_manifest.json runtime_evidence_identity missing field: source_revision",
+            validation["errors"],
+        )
+        self.assertIn(
+            "release_manifest.json runtime_evidence_identity artifacts.live_pool.sha256 does not match artifact_manifest.json",
+            validation["errors"],
+        )
 
     def test_validate_release_outputs_rejects_mismatched_artifact_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
