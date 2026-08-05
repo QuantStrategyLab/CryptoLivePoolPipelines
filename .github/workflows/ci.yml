@@ -36,6 +36,32 @@ jobs:
           set -euo pipefail
           python -m pip check
 
+      - name: Verify clean wheel package contract
+        run: |
+          set -euo pipefail
+          TMP_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TMP_DIR"' EXIT
+          python -m pip wheel --no-deps --wheel-dir "$TMP_DIR/dist" .
+          python -m venv --system-site-packages "$TMP_DIR/venv"
+          (
+            cd "$TMP_DIR"
+            unset PYTHONPATH
+            "$TMP_DIR/venv/bin/python" -m pip install "$TMP_DIR/dist"/*.whl
+            "$TMP_DIR/venv/bin/python" - <<'PY'
+          import importlib
+          from pathlib import Path
+
+          package_root = Path(importlib.import_module("src").__file__).parent
+          required = [
+              package_root / "__init__.py",
+              package_root / "backtest.py",
+              package_root / "strategy_lifecycle" / "orchestrator_runner.py",
+          ]
+          assert all(path.is_file() for path in required), required
+          importlib.import_module("src.strategy_lifecycle.orchestrator_runner")
+          PY
+          )
+
       - name: Run ruff
         run: |
           set -euo pipefail
