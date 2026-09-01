@@ -128,6 +128,10 @@ class MonthlyBuildTelegramTests(unittest.TestCase):
         self.assertNotIn("profile=", message)
         self.assertNotIn("pool_size=", message)
 
+    def test_language_aliases_normalize_to_supported_notification_locales(self) -> None:
+        self.assertEqual(MODULE.get_notify_lang("zh-CN"), "zh")
+        self.assertEqual(MODULE.get_notify_lang("en_US"), "en")
+
     def test_chinese_warning_labels_preserve_raw_diagnostics_explicitly(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
