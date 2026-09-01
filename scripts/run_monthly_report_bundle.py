@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "output"
+PERFORMANCE_METRICS = ("sharpe", "cagr", "calmar", "win_rate", "max_dd")
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,6 +35,12 @@ def parse_args() -> argparse.Namespace:
 def load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def load_optional_json(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    return load_json(path)
 
 
 def load_text(path: Path) -> str:
@@ -70,10 +78,16 @@ def build_bundle_manifest(output_dir: Path | str, bundle_dir: Path | str) -> dic
         "monthly_review.md",
         "monthly_review_prompt.md",
         "monthly_telegram.txt",
-        "ai_review_input.md",
-        "job_summary.md",
-        "monthly_report_bundle.json",
     ]
+    if (root / "strategy_metrics.json").is_file():
+        artifact_files.append("strategy_metrics.json")
+    artifact_files.extend(
+        [
+            "ai_review_input.md",
+            "job_summary.md",
+            "monthly_report_bundle.json",
+        ]
+    )
 
     return {
         "artifact_name": artifact_name,
@@ -123,9 +137,68 @@ def strip_wrapped_h1(markdown: str, heading: str) -> str:
     return text
 
 
-def render_ai_review_input(bundle: dict[str, Any], release_status_md: str, monthly_review_md: str, telegram_text: str) -> str:
+def _format_metric(value: Any) -> str:
+    if value is None or isinstance(value, bool):
+        return "n/a"
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if not math.isfinite(number):
+        return "n/a"
+    return f"{number:.6f}"
+
+
+def render_strategy_metrics(strategy_metrics: dict[str, Any] | None) -> str:
+    if strategy_metrics is None:
+        return "- Strategy performance metrics were not generated for this bundle."
+
+    snapshots = strategy_metrics.get("snapshots", [])
+    if not isinstance(snapshots, list) or not snapshots:
+        return "- No strategy performance snapshots were present in `strategy_metrics.json`."
+
+    schema_version = str(strategy_metrics.get("schema_version", "")).strip() or "n/a"
+    metrics_kind = str(strategy_metrics.get("metrics_kind", "")).strip() or "n/a"
+    lines = [
+        f"- Contract: schema_version={schema_version} metrics_kind={metrics_kind}",
+    ]
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict):
+            continue
+        profile = str(snapshot.get("strategy_profile", "")).strip() or "unknown_profile"
+        plugin = str(snapshot.get("plugin", "")).strip()
+        label = f"{profile} ({plugin})" if plugin else profile
+        current = snapshot.get("current_metrics", {})
+        baseline = snapshot.get("baseline_metrics", {})
+        if not isinstance(current, dict):
+            current = {}
+        if not isinstance(baseline, dict):
+            baseline = {}
+        current_text = ", ".join(
+            f"{metric}={_format_metric(current.get(metric))}" for metric in PERFORMANCE_METRICS
+        )
+        baseline_text = ", ".join(
+            f"{metric}={_format_metric(baseline.get(metric))}" for metric in PERFORMANCE_METRICS
+        )
+        missing_current = [metric for metric in PERFORMANCE_METRICS if _format_metric(current.get(metric)) == "n/a"]
+        missing_text = ",".join(missing_current) if missing_current else "none"
+        lines.append(
+            f"- {label}: current[{current_text}] baseline[{baseline_text}] "
+            f"missing_current={missing_text}"
+        )
+    return "\n".join(lines)
+
+
+def render_ai_review_input(
+    bundle: dict[str, Any],
+    release_status_md: str,
+    monthly_review_md: str,
+    telegram_text: str,
+    strategy_metrics: dict[str, Any] | None = None,
+) -> str:
     release_status_body = strip_wrapped_h1(release_status_md, "Release Status Summary")
     monthly_review_body = strip_wrapped_h1(monthly_review_md, "Monthly Review")
+    strategy_metrics_body = render_strategy_metrics(strategy_metrics)
     return f"""# Monthly Report Review Input
 
 Use this file as the primary review input for the monthly upstream release package.
@@ -161,6 +234,10 @@ Use this file as the primary review input for the monthly upstream release packa
 
 {monthly_review_body}
 
+## Strategy Metrics
+
+{strategy_metrics_body}
+
 ## Telegram Preview
 
 ```text
@@ -179,6 +256,7 @@ def write_bundle(output_dir: Path | str, bundle_dir: Path | str) -> dict[str, An
     release_status_md = load_text(root / "release_status_summary.md")
     monthly_review_md = load_text(root / "monthly_review.md")
     telegram_text = load_text(root / "monthly_telegram.txt")
+    strategy_metrics = load_optional_json(root / "strategy_metrics.json")
 
     bundle = build_bundle_manifest(root, bundle_root)
 
@@ -191,6 +269,8 @@ def write_bundle(output_dir: Path | str, bundle_dir: Path | str) -> dict[str, An
         "monthly_telegram.txt",
     ):
         shutil.copy2(root / filename, bundle_root / filename)
+    if strategy_metrics is not None:
+        shutil.copy2(root / "strategy_metrics.json", bundle_root / "strategy_metrics.json")
 
     job_summary_path = bundle_root / "job_summary.md"
     ai_review_path = bundle_root / "ai_review_input.md"
@@ -198,7 +278,13 @@ def write_bundle(output_dir: Path | str, bundle_dir: Path | str) -> dict[str, An
 
     job_summary_path.write_text(render_job_summary(bundle, release_status, monthly_review), encoding="utf-8")
     ai_review_path.write_text(
-        render_ai_review_input(bundle, release_status_md, monthly_review_md, telegram_text),
+        render_ai_review_input(
+            bundle,
+            release_status_md,
+            monthly_review_md,
+            telegram_text,
+            strategy_metrics,
+        ),
         encoding="utf-8",
     )
     manifest_path.write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
