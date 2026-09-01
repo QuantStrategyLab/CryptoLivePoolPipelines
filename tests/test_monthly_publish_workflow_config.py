@@ -1,16 +1,37 @@
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "monthly_publish.yml"
+LIFECYCLE_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "publish-lifecycle-inputs.yml"
 README_ZH_PATH = PROJECT_ROOT / "README.zh-CN.md"
 QPK_DEPENDENCY = (
     "quant-platform-kit @ "
     "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@ff70b162ac8e50e1ece617e570dab76b6740d41e"
 )
+PINNED_ACTIONS = (
+    "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
+    "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6",
+    "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7",
+)
+EXPECTED_REMOTE_ACTIONS = {
+    WORKFLOW_PATH: {
+        "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),
+        "actions/create-github-app-token": ("bcd2ba49218906704ab6c1aa796996da409d3eb1", "v3"),
+        "actions/setup-python": ("ece7cb06caefa5fff74198d8649806c4678c61a1", "v6"),
+        "actions/upload-artifact": ("043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "v7"),
+        "google-github-actions/auth": ("7c6bc770dae815cd3e89ee6cdf493a5fab2cc093", "v3"),
+    },
+    LIFECYCLE_WORKFLOW_PATH: {
+        "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),
+        "actions/setup-python": ("ece7cb06caefa5fff74198d8649806c4678c61a1", "v6"),
+        "actions/upload-artifact": ("043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "v7"),
+    },
+}
 
 
 class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
@@ -18,9 +39,9 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("actions: write", workflow)
-        self.assertIn("actions/checkout@v6", workflow)
-        self.assertIn("google-github-actions/auth@v3", workflow)
-        self.assertIn("actions/upload-artifact@v7", workflow)
+        self.assertIn(PINNED_ACTIONS[0], workflow)
+        self.assertIn("google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3", workflow)
+        self.assertIn(PINNED_ACTIONS[2], workflow)
         self.assertIn("GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}", workflow)
         self.assertIn("GCS_BUCKET: ${{ vars.GCS_BUCKET }}", workflow)
         self.assertIn("workload_identity_provider:", workflow)
@@ -50,7 +71,10 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("QuantStrategyLab/AIAuditBridge", workflow)
         self.assertIn("CROSS_REPO_GITHUB_APP_ID", workflow)
         self.assertIn("CROSS_REPO_GITHUB_APP_PRIVATE_KEY", workflow)
-        self.assertIn("actions/create-github-app-token@v3", workflow)
+        self.assertIn(
+            "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3",
+            workflow,
+        )
         self.assertIn("AIAuditBridge", workflow)
         self.assertIn("permission-actions: write", workflow)
         self.assertIn("APP_TOKEN", workflow)
@@ -70,6 +94,24 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertNotIn("/repos/{target_repository}/dispatches", workflow)
         self.assertNotIn("LEGACY_API_REVIEW_ENABLED", workflow)
         self.assertNotIn("/actions/workflows/ai_review.yml/dispatches", workflow)
+
+    def test_privileged_workflows_pin_remote_actions_to_full_commit_shas(self) -> None:
+        uses_pattern = re.compile(r"^\s*uses:\s*([^\s#]+)(?:\s+#\s*([^\s#]+))?\s*$", re.MULTILINE)
+        for workflow_path, expected in EXPECTED_REMOTE_ACTIONS.items():
+            workflow = workflow_path.read_text(encoding="utf-8")
+            matches = uses_pattern.findall(workflow)
+            observed = {}
+            for reference, tag in matches:
+                if reference.startswith("./"):
+                    continue
+                action, separator, revision = reference.rpartition("@")
+                self.assertEqual(separator, "@", f"invalid remote action reference in {workflow_path}")
+                self.assertRegex(revision, r"^[0-9a-f]{40}$")
+                self.assertRegex(tag, r"^v\d+$")
+                self.assertNotIn(action, observed, f"duplicate remote action in {workflow_path}")
+                observed[action] = (revision, tag)
+
+            self.assertEqual(observed, expected)
 
     def test_real_publish_dependency_is_locked(self) -> None:
         requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")

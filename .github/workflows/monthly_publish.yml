@@ -43,15 +43,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set Up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.11"
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: "projects/677468735457/locations/global/workloadIdentityPools/github-actions/providers/github-main"
           service_account: "codex-gcp-operator@binancequant.iam.gserviceaccount.com"
@@ -118,7 +118,7 @@ jobs:
         run: cat data/output/monthly_report_bundle/job_summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Monthly Report Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ steps.monthly-report.outputs.artifact_name }}
           path: data/output/monthly_report_bundle
@@ -214,7 +214,7 @@ jobs:
         id: codex_review_app_token
         if: steps.codex_review_app_credentials.outputs.available == 'true'
         continue-on-error: true
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
           app-id: ${{ vars.CROSS_REPO_GITHUB_APP_ID }}
           private-key: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
