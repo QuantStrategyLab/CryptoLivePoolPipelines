@@ -31,7 +31,15 @@ _TEXTS = {
         "missing": "missing",
         "validation": "validation",
         "warnings": "warnings",
+        "warnings_original": "warnings (original)",
         "none": "none",
+        "official_summary": "{official}: profile={profile} version={version} mode={mode} pool_size={pool_size}",
+        "shadow_summary": (
+            "{shadow}: official_baseline last={official_last} releases={official_releases}; "
+            "challenger_topk_60 last={challenger_last} releases={challenger_releases}"
+        ),
+        "manifest_summary": "{manifest}: {presence} dry_run={dry_run}",
+        "validation_summary": "{validation}: ok={ok} manifest_present={manifest_present} age_days={age_days}",
     },
     "zh": {
         "title": "CryptoLivePoolPipelines 月度发布",
@@ -47,7 +55,15 @@ _TEXTS = {
         "missing": "缺失",
         "validation": "校验",
         "warnings": "告警",
+        "warnings_original": "告警（原文）",
         "none": "无",
+        "official_summary": "{official}：策略配置={profile}；版本={version}；模式={mode}；池规模={pool_size}",
+        "shadow_summary": (
+            "{shadow}：官方基线最近日期={official_last}、发布次数={official_releases}；"
+            "挑战池最近日期={challenger_last}、发布次数={challenger_releases}"
+        ),
+        "manifest_summary": "{manifest}：{presence}；演练模式={dry_run}",
+        "validation_summary": "{validation}：通过={ok}；清单存在={manifest_present}；数据距今天数={age_days}",
     },
 }
 
@@ -59,9 +75,10 @@ def get_notify_lang(value: str | None = None) -> str:
     return DEFAULT_NOTIFY_LANG
 
 
-def text(lang: str, key: str) -> str:
+def text(lang: str, key: str, /, **values: Any) -> str:
     active_lang = lang if lang in SUPPORTED_NOTIFY_LANGS else DEFAULT_NOTIFY_LANG
-    return _TEXTS.get(active_lang, _TEXTS[DEFAULT_NOTIFY_LANG]).get(key, _TEXTS[DEFAULT_NOTIFY_LANG].get(key, key))
+    template = _TEXTS.get(active_lang, _TEXTS[DEFAULT_NOTIFY_LANG]).get(key, _TEXTS[DEFAULT_NOTIFY_LANG].get(key, key))
+    return template.format(**values)
 
 
 def parse_args() -> argparse.Namespace:
@@ -207,11 +224,15 @@ def format_message(payload: dict[str, Any], *, lang: str | None = None) -> str:
     validation = payload["validation"]
     shadow = payload["shadow_tracks"]
     shadow_line = (
-        f"{text(active_lang, 'shadow')}: "
-        f"official_baseline last={shadow['official_baseline']['last_as_of_date']} "
-        f"releases={shadow['official_baseline']['release_count']}; "
-        f"challenger_topk_60 last={shadow['challenger_topk_60']['last_as_of_date']} "
-        f"releases={shadow['challenger_topk_60']['release_count']}"
+        text(
+            active_lang,
+            "shadow_summary",
+            shadow=text(active_lang, "shadow"),
+            official_last=shadow["official_baseline"]["last_as_of_date"],
+            official_releases=shadow["official_baseline"]["release_count"],
+            challenger_last=shadow["challenger_topk_60"]["last_as_of_date"],
+            challenger_releases=shadow["challenger_topk_60"]["release_count"],
+        )
         if shadow["official_baseline"]["available"] or shadow["challenger_topk_60"]["available"]
         else f"{text(active_lang, 'shadow')}: {text(active_lang, 'shadow_not_generated')}"
     )
@@ -220,22 +241,35 @@ def format_message(payload: dict[str, Any], *, lang: str | None = None) -> str:
         text(active_lang, "title"),
         f"{text(active_lang, 'status')}: {text(active_lang, status_key)}",
         f"{text(active_lang, 'as_of_date')}: {payload['as_of_date']}",
-        (
-            f"{text(active_lang, 'official')}: "
-            f"profile={official['profile']} "
-            f"version={official['version']} "
-            f"mode={official['mode']} "
-            f"pool_size={official['pool_size']}"
+        text(
+            active_lang,
+            "official_summary",
+            official=text(active_lang, "official"),
+            profile=official["profile"],
+            version=official["version"],
+            mode=official["mode"],
+            pool_size=official["pool_size"],
         ),
         shadow_line,
-        f"{text(active_lang, 'manifest')}: {text(active_lang, 'present') if manifest['present'] else text(active_lang, 'missing')} dry_run={manifest['dry_run']}",
+        text(
+            active_lang,
+            "manifest_summary",
+            manifest=text(active_lang, "manifest"),
+            presence=text(active_lang, "present") if manifest["present"] else text(active_lang, "missing"),
+            dry_run=manifest["dry_run"],
+        ),
     ]
     if validation["ok"] is not None:
-        lines.append(
-            f"{text(active_lang, 'validation')}: ok={validation['ok']} manifest_present={validation['manifest_present']} age_days={validation['age_days']}"
-        )
+        lines.append(text(
+            active_lang,
+            "validation_summary",
+            validation=text(active_lang, "validation"),
+            ok=validation["ok"],
+            manifest_present=validation["manifest_present"],
+            age_days=validation["age_days"],
+        ))
     if payload["warnings"]:
-        lines.append(f"{text(active_lang, 'warnings')}: " + " | ".join(payload["warnings"][:4]))
+        lines.append(f"{text(active_lang, 'warnings_original')}: " + " | ".join(payload["warnings"][:4]))
     else:
         lines.append(f"{text(active_lang, 'warnings')}: {text(active_lang, 'none')}")
     return "\n".join(lines)

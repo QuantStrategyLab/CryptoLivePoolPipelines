@@ -120,7 +120,22 @@ class MonthlyBuildTelegramTests(unittest.TestCase):
         self.assertIn("CryptoLivePoolPipelines 月度发布", message)
         self.assertIn("状态: 正常", message)
         self.assertIn("官方池:", message)
+        self.assertIn("策略配置=baseline_blended_rank", message)
+        self.assertIn("影子池：官方基线最近日期=2026-03-13", message)
+        self.assertIn("发布清单：已存在；演练模式=False", message)
+        self.assertIn("校验：通过=True；清单存在=True；数据距今天数=1", message)
         self.assertIn("告警: 无", message)
+        self.assertNotIn("profile=", message)
+        self.assertNotIn("pool_size=", message)
+
+    def test_chinese_warning_labels_preserve_raw_diagnostics_explicitly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            self.write_fixture_files(root, include_manifest=False)
+            payload = MODULE.build_health_payload(root / "data" / "output")
+            message = MODULE.format_message(payload, lang="zh")
+
+        self.assertIn("告警（原文）: missing release_manifest.json", message)
 
     def test_main_uses_global_telegram_chat_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
