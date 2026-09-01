@@ -14,6 +14,7 @@ from .export import (
     export_latest_universe,
     export_live_pool,
     export_strategy_artifact_manifest,
+    resolve_clean_source_revision,
 )
 from .indicators import compute_btc_cycle_indicators
 from .features import MODEL_FEATURE_COLUMNS, add_market_context_features, build_feature_panel
@@ -350,6 +351,8 @@ def build_live_pool_outputs(
             "four-artifact release contract."
         )
 
+    source_revision = resolve_clean_source_revision()
+
     logger = get_logger("build_live_pool_outputs")
     resolved_mode, _ = resolve_universe_mode(config, universe_mode=universe_mode, purpose="live")
     logger.info("Building live pool with universe mode '%s'.", resolved_mode)
@@ -386,7 +389,9 @@ def build_live_pool_outputs(
         & panel["blended_target"].notna()
     )
     score_mask = (date_index == latest_date) & panel["in_universe"]
-    result = fit_predict_models(panel.loc[train_mask], panel.loc[score_mask], feature_columns, config)
+    result = fit_predict_models(
+        panel.loc[train_mask], panel.loc[score_mask], feature_columns, config, source_revision=source_revision
+    )
 
     if result.predictions.empty:
         panel.loc[score_mask, "linear_score_raw"] = pd.NA
@@ -426,6 +431,7 @@ def build_live_pool_outputs(
         live_pool=live_payload,
         source_project=source_project,
         input_timestamp=input_timestamp,
+        model_run_manifest=result.model_run_manifest,
     )
 
     # Compute and export BTC cycle indicators for crypto DCA strategies
@@ -461,6 +467,7 @@ def build_live_pool_outputs(
         "train_end_date": train_end_date,
         "linear_backend": result.linear_backend,
         "ml_backend": result.ml_backend,
+        "model_run_manifest": result.model_run_manifest,
         "universe_mode": resolved_mode,
     }
 

@@ -11,6 +11,10 @@ from typing import Any
 
 import pandas as pd
 
+from .model_run_manifest import (
+    canonical_model_run_manifest_digest,
+    validate_model_run_manifest,
+)
 from .release_contract import assert_release_outputs
 from .utils import read_json, write_json
 
@@ -180,6 +184,25 @@ def _validate_runtime_evidence_identity(
     expected_timestamp = f"{live_pool.get('as_of_date')}T00:00:00Z"
     if identity.get("input_timestamp") != expected_timestamp:
         raise ValueError("Runtime identity input_timestamp mismatch.")
+    model_run_manifest = artifact_manifest.get("model_run_manifest")
+    model_run_binding = identity.get("model_run_manifest")
+    if model_run_manifest is None and model_run_binding is None:
+        return deepcopy(identity)
+    if not isinstance(model_run_binding, dict):
+        raise ValueError("Runtime identity model_run_manifest binding is invalid.")
+    validated_model_run_manifest = validate_model_run_manifest(model_run_manifest)
+    if validated_model_run_manifest["source"]["revision"] != identity.get("source_revision"):
+        raise ValueError("Runtime identity model_run_manifest source revision mismatch.")
+    expected_digest = canonical_model_run_manifest_digest(validated_model_run_manifest)
+    if (
+        model_run_binding.get("contract_version") != validated_model_run_manifest["contract_version"]
+        or model_run_binding.get("path") != "model_run_manifest.json"
+        or model_run_binding.get("sha256") != expected_digest
+    ):
+        raise ValueError("Runtime identity model_run_manifest binding mismatch.")
+    model_run_path = next(iter(paths.values())).parent / "model_run_manifest.json"
+    if not model_run_path.is_file() or _sha256_file(model_run_path) != expected_digest:
+        raise ValueError("Runtime identity model_run_manifest digest mismatch.")
     return deepcopy(identity)
 
 
