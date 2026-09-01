@@ -70,8 +70,11 @@ _TEXTS = {
 
 def get_notify_lang(value: str | None = None) -> str:
     raw = str(value if value is not None else os.getenv("NOTIFY_LANG", DEFAULT_NOTIFY_LANG)).strip().lower()
-    if raw in SUPPORTED_NOTIFY_LANGS:
-        return raw
+    normalized = raw.replace("_", "-")
+    if normalized.startswith("zh"):
+        return "zh"
+    if normalized.startswith("en"):
+        return "en"
     return DEFAULT_NOTIFY_LANG
 
 
