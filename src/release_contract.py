@@ -7,6 +7,10 @@ from typing import Any
 
 import pandas as pd
 
+from .model_run_manifest import (
+    canonical_model_run_manifest_digest,
+    validate_model_run_manifest,
+)
 from .utils import read_json
 
 
@@ -182,6 +186,7 @@ def _validate_runtime_evidence_identity(
     *,
     live_pool_mode: str,
     live_pool_version: str,
+    output_path: Path,
     errors: list[str],
 ) -> None:
     label = "release_manifest.json runtime_evidence_identity"
@@ -236,6 +241,33 @@ def _validate_runtime_evidence_identity(
             errors.append(
                 f"{label} artifacts.{artifact_name}.sha256 does not match artifact_manifest.json"
             )
+
+    model_run_manifest = artifact_manifest.get("model_run_manifest")
+    model_run_binding = identity.get("model_run_manifest")
+    if model_run_manifest is None and model_run_binding is None:
+        return
+    if not isinstance(model_run_binding, dict):
+        errors.append(f"{label} model_run_manifest binding must be an object")
+        return
+    try:
+        validated_model_run_manifest = validate_model_run_manifest(model_run_manifest)
+        expected_digest = canonical_model_run_manifest_digest(validated_model_run_manifest)
+    except ValueError as exc:
+        errors.append(f"artifact_manifest.json model_run_manifest is invalid: {exc}")
+        return
+    if validated_model_run_manifest["source"]["revision"] != identity.get("source_revision"):
+        errors.append(f"{label} model_run_manifest source_revision does not match runtime identity")
+        return
+    if (
+        model_run_binding.get("contract_version") != validated_model_run_manifest["contract_version"]
+        or model_run_binding.get("path") != "model_run_manifest.json"
+        or model_run_binding.get("sha256") != expected_digest
+    ):
+        errors.append(f"{label} model_run_manifest binding does not match artifact_manifest.json")
+        return
+    model_run_path = output_path / "model_run_manifest.json"
+    if not model_run_path.is_file() or _sha256_file(model_run_path) != expected_digest:
+        errors.append(f"{label} model_run_manifest digest does not match file content")
 
 
 def _coerce_selected_flag(series: pd.Series) -> pd.Series:
@@ -650,6 +682,7 @@ def validate_release_outputs(
             artifact_manifest,
             live_pool_mode=live_pool_mode,
             live_pool_version=live_pool_version,
+            output_path=output_path,
             errors=errors,
         )
 

@@ -187,6 +187,10 @@ ranking_schemes:
     drawdown_penalty: 0.15
 
 model:
+  execution_mode: "production"
+  model_family: "crypto_live_pool_dual_regressor"
+  linear_backend: "sklearn_ridge"
+  ml_backend: "lightgbm"
   random_state: 42
   use_lightgbm: true
   min_train_rows: 300

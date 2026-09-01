@@ -8,6 +8,11 @@ from typing import Any
 
 import pandas as pd
 
+from .model_run_manifest import (
+    canonical_model_run_manifest_digest,
+    validate_model_run_manifest,
+    write_model_run_manifest,
+)
 from .ranking import sort_ranking_snapshot
 from .utils import date_to_str, write_json
 
@@ -223,6 +228,7 @@ def build_strategy_artifact_manifest(
     source_project: str = "crypto-live-pool-pipelines",
     input_timestamp: Any,
     generated_at: Any | None = None,
+    model_run_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the profile-aware artifact manifest consumed by downstream runtimes."""
     output_path = Path(output_dir)
@@ -271,7 +277,7 @@ def build_strategy_artifact_manifest(
         "artifact_version": version,
         "artifacts": {name: dict(artifacts[name]) for name in REQUIRED_IDENTITY_ARTIFACTS},
     }
-    return {
+    payload = {
         "manifest_type": "strategy_artifact",
         "contract_version": str(contract_version),
         "strategy_profile": str(strategy_profile),
@@ -289,6 +295,23 @@ def build_strategy_artifact_manifest(
         "artifacts": artifacts,
         "runtime_evidence_identity": runtime_evidence_identity,
     }
+    if model_run_manifest is not None:
+        validated_model_run_manifest = validate_model_run_manifest(model_run_manifest)
+        if validated_model_run_manifest["source"]["revision"] != runtime_evidence_identity["source_revision"]:
+            raise ValueError("model_run_manifest source revision must match runtime evidence identity.")
+        model_run_digest = write_model_run_manifest(
+            output_path / "model_run_manifest.json",
+            validated_model_run_manifest,
+        )
+        if model_run_digest != canonical_model_run_manifest_digest(validated_model_run_manifest):
+            raise ValueError("model_run_manifest canonical digest mismatch.")
+        payload["model_run_manifest"] = validated_model_run_manifest
+        runtime_evidence_identity["model_run_manifest"] = {
+            "contract_version": validated_model_run_manifest["contract_version"],
+            "path": "model_run_manifest.json",
+            "sha256": model_run_digest,
+        }
+    return payload
 
 
 def export_btc_cycle_indicators(
@@ -314,6 +337,7 @@ def export_strategy_artifact_manifest(
     contract_version: str = DEFAULT_ARTIFACT_CONTRACT_VERSION,
     source_project: str = "crypto-live-pool-pipelines",
     input_timestamp: Any,
+    model_run_manifest: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest = build_strategy_artifact_manifest(
         output_dir=output_dir,
@@ -323,6 +347,7 @@ def export_strategy_artifact_manifest(
         contract_version=contract_version,
         source_project=source_project,
         input_timestamp=input_timestamp,
+        model_run_manifest=model_run_manifest,
     )
     write_json(Path(output_dir) / "artifact_manifest.json", manifest)
     return manifest
