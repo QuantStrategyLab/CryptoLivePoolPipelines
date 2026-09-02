@@ -1,7 +1,7 @@
 [qsl]
 repo = "CryptoLivePoolPipelines"
 tier = "pipeline"
-ring = 2
+upgrade_ring = "ring_c"
 allow_legacy = true
 legacy_reason = "requirements.txt and requirements-lock.txt remain for runtime deployment compatibility."
 enforce_bundle = false
@@ -13,4 +13,4 @@ snapshot_contract = "docs/integration_contract.md"
 
 
 [qsl.compat]
-bundle = "2026.07.2"
+bundle = "2026.09.0"
