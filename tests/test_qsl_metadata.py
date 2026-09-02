@@ -13,10 +13,10 @@ def test_qsl_metadata_has_compat_bundle() -> None:
 
     qsl = data["qsl"]
     assert qsl["tier"] == "pipeline"
-    assert qsl["ring"] == 2
+    assert qsl["upgrade_ring"] == "ring_c"
     assert qsl.get("repo") == "CryptoLivePoolPipelines"
     compat = qsl["compat"]
-    assert compat["bundle"] == "2026.07.2"
+    assert compat["bundle"] == "2026.09.0"
     
     assert qsl.get("artifact_contract") == "docs/integration_contract.md"
     assert qsl.get("snapshot_contract") == "docs/integration_contract.md"
