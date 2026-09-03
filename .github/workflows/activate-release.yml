@@ -1,0 +1,34 @@
+name: Activate Release
+
+"on":
+  workflow_dispatch:
+    inputs:
+      promotion_manifest_path:
+        description: Repository path to the immutable Promotion Manifest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  activation-disabled:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set Up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          REQ_FILE="requirements-lock.txt"
+          if [ ! -f "${REQ_FILE}" ]; then REQ_FILE="requirements.txt"; fi
+          pip install -r "${REQ_FILE}"
+
+      - name: Reject Activation Until Promotion Manifest Validation Exists
+        run: python scripts/publish_release.py --activate --promotion-manifest "${{ inputs.promotion_manifest_path }}"

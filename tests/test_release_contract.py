@@ -5,9 +5,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
+import src.publish as publish_module
 
 from src.publish import (
     PublishSettings,
@@ -234,7 +236,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
         self.assertEqual(validation["pool_size"], 5)
         self.assertEqual(validation["age_days"], 1)
 
-    def test_identity_is_canonical_across_artifact_release_and_firestore(self) -> None:
+    def test_candidate_manifest_preserves_identity_without_activation_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             self.build_outputs(
@@ -257,17 +259,47 @@ class ReleaseContractValidationTests(unittest.TestCase):
                 upload_current_pointer=False,
             )
             storage_layout = build_storage_layout(settings, artifacts)
-            firestore_payload = build_firestore_payload(settings, artifacts, storage_layout)
             release_manifest = build_release_manifest(
                 settings,
                 artifacts,
                 storage_layout,
-                firestore_payload,
+            )
+            write_json(output_dir / "release_manifest.json", release_manifest)
+            candidate_validation = validate_release_outputs(
+                output_dir,
+                require_manifest=True,
+                require_artifact_manifest=True,
+                require_runtime_evidence_identity=True,
+            )
+
+            unsafe_manifest = json.loads(json.dumps(release_manifest))
+            unsafe_manifest["current_prefix"] = "crypto-live-pool-pipelines/current"
+            unsafe_manifest["firestore"] = {"document": "canonical"}
+            unsafe_manifest["artifacts"]["live_pool"]["current_uri"] = (
+                "gs://bucket/crypto-live-pool-pipelines/current/live_pool.json"
+            )
+            write_json(output_dir / "release_manifest.json", unsafe_manifest)
+            unsafe_validation = validate_release_outputs(
+                output_dir,
+                require_manifest=True,
+                require_artifact_manifest=True,
             )
 
         identity = artifacts.artifact_manifest["runtime_evidence_identity"]
         self.assertEqual(release_manifest["runtime_evidence_identity"], identity)
-        self.assertEqual(firestore_payload["runtime_evidence_identity"], identity)
+        self.assertEqual(release_manifest["stage"], "candidate")
+        self.assertEqual(release_manifest["activation"]["status"], "not_activated")
+        self.assertTrue(release_manifest["activation"]["promotion_manifest_required"])
+        self.assertNotIn("current_prefix", release_manifest)
+        self.assertNotIn("firestore", release_manifest)
+        for artifact in release_manifest["artifacts"].values():
+            self.assertNotIn("current_object", artifact)
+            self.assertNotIn("current_uri", artifact)
+        self.assertTrue(candidate_validation["ok"])
+        self.assertFalse(unsafe_validation["ok"])
+        self.assertTrue(
+            any("must not contain" in error for error in unsafe_validation["errors"])
+        )
 
     def test_firestore_payload_preserves_exact_legacy_artifact_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -304,7 +336,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
         self.assertEqual(handoff["encoding"], "utf-8")
         self.assertEqual(handoff["utf8_text"].encode("utf-8"), exact_bytes)
 
-    def test_upload_reuses_validated_legacy_snapshot_after_path_mutation(self) -> None:
+    def test_candidate_upload_reuses_validated_snapshot_without_writing_current(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             output_dir = self.build_runtime_identity_outputs(root)
@@ -335,6 +367,12 @@ class ReleaseContractValidationTests(unittest.TestCase):
             uploaded: dict[str, bytes] = {}
 
             class FakeStore:
+                def exists(self, uri: str) -> bool:
+                    return uri in uploaded
+
+                def read_bytes(self, uri: str) -> bytes:
+                    return uploaded[uri]
+
                 def write_bytes(self, uri: str, payload: bytes) -> None:
                     uploaded[uri] = payload
 
@@ -351,7 +389,6 @@ class ReleaseContractValidationTests(unittest.TestCase):
 
         legacy_objects = storage_layout["objects"]["live_pool_legacy.json"]
         release_bytes = uploaded[legacy_objects["release_uri"]]
-        current_bytes = uploaded[legacy_objects["current_uri"]]
         manifest_digest = artifacts.artifact_manifest["artifacts"][
             "live_pool_legacy"
         ]["sha256"]
@@ -359,10 +396,94 @@ class ReleaseContractValidationTests(unittest.TestCase):
             "live_pool_legacy"
         ]["sha256"]
         self.assertEqual(release_bytes, validated_bytes)
-        self.assertEqual(current_bytes, validated_bytes)
+        self.assertNotIn(legacy_objects["current_uri"], uploaded)
         self.assertEqual(hashlib.sha256(validated_bytes).hexdigest(), manifest_digest)
         self.assertEqual(hashlib.sha256(release_bytes).hexdigest(), manifest_digest)
         self.assertEqual(identity_digest, manifest_digest)
+
+    def test_candidate_upload_rejects_overwriting_different_versioned_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.build_runtime_identity_outputs(Path(tmp_dir))
+            artifacts = load_release_artifacts(output_dir, "core_major")
+            settings = PublishSettings(
+                enabled=True,
+                dry_run=False,
+                mode="core_major",
+                project_id="test-project",
+                cloud_bucket="test-bucket",
+                cloud_root_prefix="crypto-live-pool-pipelines",
+                firestore_collection="strategy",
+                firestore_document="CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
+                source_project="crypto-live-pool-pipelines",
+                upload_current_pointer=True,
+            )
+            storage_layout = build_storage_layout(settings, artifacts)
+            conflict_uri = storage_layout["objects"]["live_pool.json"]["release_uri"]
+
+            class FakeStore:
+                def exists(self, uri: str) -> bool:
+                    return uri == conflict_uri
+
+                def read_bytes(self, uri: str) -> bytes:
+                    return b'{"different": true}\n'
+
+                def write_bytes(self, uri: str, payload: bytes) -> None:
+                    raise AssertionError("candidate upload must preflight conflicts before writing")
+
+            with patch(
+                "quant_platform_kit.cloud.get_object_store",
+                return_value=FakeStore(),
+            ), self.assertRaisesRegex(ValueError, "Immutable candidate object"):
+                upload_release_artifacts(
+                    settings,
+                    artifacts,
+                    storage_layout,
+                    live_pool_legacy_exact_bytes=artifacts.live_pool_legacy_path.read_bytes(),
+                )
+
+    def test_default_publish_never_writes_firestore(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.build_runtime_identity_outputs(Path(tmp_dir))
+            config = {
+                "paths": SimpleNamespace(output_dir=output_dir),
+                "export": {"live_pool_size": 5},
+                "publish": {
+                    "enabled": True,
+                    "mode": "core_major",
+                    "project_id": "test-project",
+                    "cloud_bucket": "test-bucket",
+                    "cloud_root_prefix": "crypto-live-pool-pipelines",
+                    "firestore_collection": "strategy",
+                    "firestore_document": "CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
+                    "source_project": "crypto-live-pool-pipelines",
+                    "upload_current_pointer": True,
+                },
+            }
+
+            with patch.object(publish_module, "upload_release_artifacts"), patch.object(
+                publish_module, "publish_firestore_summary"
+            ) as publish_firestore:
+                publish_module.run_release_publish(
+                    config,
+                    require_freshness=False,
+                )
+
+        publish_firestore.assert_not_called()
+
+    def test_activation_fails_closed_before_any_cloud_write(self) -> None:
+        activation = getattr(publish_module, "run_release_activation", None)
+        self.assertIsNotNone(activation, "explicit activation entry point is required")
+
+        with patch("quant_platform_kit.cloud.get_object_store") as object_store, patch(
+            "quant_platform_kit.cloud.get_document_store"
+        ) as document_store, self.assertRaisesRegex(
+            NotImplementedError,
+            "Promotion Manifest validation is not implemented",
+        ):
+            activation({}, promotion_manifest_path="promotion-manifest.json")
+
+        object_store.assert_not_called()
+        document_store.assert_not_called()
 
     def test_firestore_payload_rejects_mutated_legacy_bytes_with_unchanged_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

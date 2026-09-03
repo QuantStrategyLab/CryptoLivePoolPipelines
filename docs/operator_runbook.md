@@ -21,11 +21,19 @@ Primary production outputs:
 - `data/output/monthly_report_bundle/ai_review_input.md`
 - `data/output/monthly_report_bundle/job_summary.md`
 
-Primary publish targets:
+Automatic monthly publish target:
+
+- GCS versioned release objects under `crypto-live-pool-pipelines/releases/<version>`
+
+Manual activation targets:
 
 - GCS current pointers under `crypto-live-pool-pipelines/current`
-- GCS versioned release objects under `crypto-live-pool-pipelines/releases/<version>`
 - Firestore `strategy/CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL`
+
+The scheduled workflow only writes a versioned candidate. It does not update
+either activation target. The manual activation entry point is fail-closed until
+Promotion Manifest validation is implemented; do not treat a candidate or its
+heartbeat as an activated release.
 
 The GCS prefix, Firestore document, and `source_project` value use the
 `crypto-live-pool-pipelines` v1 artifact namespace.
@@ -37,13 +45,17 @@ code.
 
 ## Research Path Vs Production Path
 
-Production path:
+Candidate path:
 
 - `scripts/download_history.py`
 - `scripts/build_live_pool.py`
 - `scripts/validate_release_contract.py`
 - `scripts/publish_release.py`
 - `scripts/write_release_heartbeat.py`
+
+Activation path:
+
+- `.github/workflows/activate-release.yml` (manual only; currently rejects all activation attempts)
 
 Research-only / non-publish path:
 
@@ -56,7 +68,8 @@ Research-only / non-publish path:
 Rules:
 
 - Do not treat shadow outputs, external-data experiments, or research summaries as publish-ready production artifacts.
-- Only `core_major` build outputs that pass contract validation should be published to downstream systems.
+- Only `core_major` build outputs that pass contract validation may become versioned candidates.
+- Current pointers and the Firestore canonical document require a separately validated Promotion Manifest.
 - If a manual run uses `--as-of-date` for historical investigation, treat it as replay unless you intentionally publish with `--allow-stale`.
 
 ## Upstream Reporting Responsibilities
@@ -141,14 +154,14 @@ workflow runs this shadow build automatically before the review step.
 .venv/bin/python scripts/run_monthly_report_bundle.py
 ```
 
-9. Only after steps 1-8 pass, run the real publish path through the workflow or a controlled manual execution.
+9. Only after steps 1-8 pass, publish the versioned candidate. Activation remains disabled until Promotion Manifest validation is implemented.
 
 ## Preflight Checklist
 
 - `requirements-lock.txt` is present and matches the intended release dependency set.
 - Local artifacts are non-empty and pass `scripts/validate_release_contract.py`.
 - `live_pool.json`, `live_pool_legacy.json`, and `release_manifest.json` agree on `as_of_date`, `version`, `mode`, `pool_size`, and `source_project`; `artifact_manifest.json` agrees on `as_of_date`, `version`, `mode`, `source_project`, and `symbol_count`.
-- `GCP_PROJECT_ID`, `GCS_BUCKET`, `FIRESTORE_COLLECTION`, and `FIRESTORE_DOCUMENT` are set correctly for real publish.
+- `GCP_PROJECT_ID` and `GCS_BUCKET` are set correctly for candidate publish. Firestore settings are activation-only.
 - Historical backfills use `--allow-stale` explicitly; do not silently publish stale artifacts.
 
 ## Common Failure Modes

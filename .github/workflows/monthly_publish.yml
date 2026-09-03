@@ -73,8 +73,8 @@ jobs:
             --shadow-universe-mode "${PUBLISH_MODE}" \
             --skip-publish-dry-run
 
-      - name: Publish Production v1 Release
-        run: python scripts/publish_release.py --mode "${PUBLISH_MODE}"
+      - name: Publish Production v1 Candidate
+        run: python scripts/publish_release.py --candidate-only --mode "${PUBLISH_MODE}"
 
       - name: Write Release Status Summary
         run: python scripts/run_release_status_summary.py

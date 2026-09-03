@@ -67,6 +67,11 @@ REQUIRED_ARTIFACT_MANIFEST_ARTIFACTS = {
     "live_pool_legacy": "live_pool_legacy.json",
 }
 EXPECTED_ARTIFACT_CONTRACT_VERSION = "crypto_live_pool_rotation.live_pool.v1"
+CANDIDATE_MANIFEST_CONTRACT_VERSION = "qsl.crypto_live_pool_candidate.v1"
+CANDIDATE_MANIFEST_ARTIFACTS = {
+    **REQUIRED_ARTIFACT_MANIFEST_ARTIFACTS,
+    "artifact_manifest": "artifact_manifest.json",
+}
 REQUIRED_RUNTIME_EVIDENCE_IDENTITY_FIELDS = (
     "strategy_profile",
     "mode",
@@ -573,40 +578,91 @@ def validate_release_outputs(
         if manifest_as_of_date and live_pool_as_of_date and manifest_as_of_date != live_pool_as_of_date:
             errors.append("release_manifest.json as_of_date does not match live_pool.json as_of_date")
 
-        firestore_section = manifest.get("firestore", {})
-        if not isinstance(firestore_section, dict):
-            errors.append("release_manifest.json firestore must be an object")
-            firestore_payload = {}
+        manifest_stage = str(manifest.get("stage", "")).strip()
+        if manifest_stage == "candidate":
+            if manifest.get("contract_version") != CANDIDATE_MANIFEST_CONTRACT_VERSION:
+                errors.append(
+                    "release_manifest.json candidate contract_version must be "
+                    f"{CANDIDATE_MANIFEST_CONTRACT_VERSION}"
+                )
+            if "current_prefix" in manifest:
+                errors.append("release_manifest.json candidate must not contain current_prefix")
+            if "firestore" in manifest:
+                errors.append("release_manifest.json candidate must not contain firestore")
+
+            activation = manifest.get("activation")
+            if not isinstance(activation, dict):
+                errors.append("release_manifest.json candidate activation must be an object")
+            elif (
+                activation.get("status") != "not_activated"
+                or activation.get("promotion_manifest_required") is not True
+            ):
+                errors.append(
+                    "release_manifest.json candidate activation must be not_activated and require a Promotion Manifest"
+                )
+
+            candidate_artifacts = manifest.get("artifacts")
+            if not isinstance(candidate_artifacts, dict):
+                errors.append("release_manifest.json candidate artifacts must be an object")
+                candidate_artifacts = {}
+            release_prefix = str(manifest.get("release_prefix", "")).strip("/")
+            for artifact_name, filename in CANDIDATE_MANIFEST_ARTIFACTS.items():
+                artifact_entry = candidate_artifacts.get(artifact_name)
+                if not isinstance(artifact_entry, dict):
+                    errors.append(
+                        f"release_manifest.json candidate artifacts.{artifact_name} must be an object"
+                    )
+                    continue
+                if "current_object" in artifact_entry or "current_uri" in artifact_entry:
+                    errors.append(
+                        f"release_manifest.json candidate artifacts.{artifact_name} must not contain current pointers"
+                    )
+                expected_object = f"{release_prefix}/{filename}"
+                release_object = str(artifact_entry.get("release_object", "")).strip("/")
+                release_uri = str(artifact_entry.get("release_uri", "")).strip()
+                if release_object != expected_object:
+                    errors.append(
+                        f"release_manifest.json candidate artifacts.{artifact_name}.release_object is invalid"
+                    )
+                if not release_uri.endswith(f"/{expected_object}"):
+                    errors.append(
+                        f"release_manifest.json candidate artifacts.{artifact_name}.release_uri is invalid"
+                    )
         else:
-            firestore_payload = firestore_section.get("payload", {})
-        if not isinstance(firestore_payload, dict):
-            errors.append("release_manifest.json firestore.payload must be an object")
-        else:
-            firestore_symbols = firestore_payload.get("symbols")
-            if firestore_symbols != live_pool_symbols:
-                errors.append("release_manifest.json firestore.payload symbols do not match live_pool.json symbols")
-            if firestore_payload.get("symbol_map") != legacy_symbol_map:
-                errors.append(
-                    "release_manifest.json firestore.payload symbol_map does not match live_pool_legacy.json symbol_map"
-                )
-            if str(firestore_payload.get("version", "")).strip() != live_pool_version:
-                errors.append("release_manifest.json firestore.payload version does not match live_pool.json version")
-            if str(firestore_payload.get("mode", "")).strip() != live_pool_mode:
-                errors.append("release_manifest.json firestore.payload mode does not match live_pool.json mode")
-            if str(firestore_payload.get("as_of_date", "")).strip() != live_pool_as_of_date:
-                errors.append(
-                    "release_manifest.json firestore.payload as_of_date does not match live_pool.json as_of_date"
-                )
-            try:
-                firestore_pool_size = int(firestore_payload.get("pool_size", 0))
-            except Exception:
-                firestore_pool_size = -1
-            if firestore_pool_size != len(live_pool_symbols):
-                errors.append("release_manifest.json firestore.payload pool_size does not match live_pool.json")
-            if str(firestore_payload.get("source_project", "")).strip() != live_pool_source_project:
-                errors.append(
-                    "release_manifest.json firestore.payload source_project does not match live_pool.json"
-                )
+            firestore_section = manifest.get("firestore", {})
+            if not isinstance(firestore_section, dict):
+                errors.append("release_manifest.json firestore must be an object")
+                firestore_payload = {}
+            else:
+                firestore_payload = firestore_section.get("payload", {})
+            if not isinstance(firestore_payload, dict):
+                errors.append("release_manifest.json firestore.payload must be an object")
+            else:
+                firestore_symbols = firestore_payload.get("symbols")
+                if firestore_symbols != live_pool_symbols:
+                    errors.append("release_manifest.json firestore.payload symbols do not match live_pool.json symbols")
+                if firestore_payload.get("symbol_map") != legacy_symbol_map:
+                    errors.append(
+                        "release_manifest.json firestore.payload symbol_map does not match live_pool_legacy.json symbol_map"
+                    )
+                if str(firestore_payload.get("version", "")).strip() != live_pool_version:
+                    errors.append("release_manifest.json firestore.payload version does not match live_pool.json version")
+                if str(firestore_payload.get("mode", "")).strip() != live_pool_mode:
+                    errors.append("release_manifest.json firestore.payload mode does not match live_pool.json mode")
+                if str(firestore_payload.get("as_of_date", "")).strip() != live_pool_as_of_date:
+                    errors.append(
+                        "release_manifest.json firestore.payload as_of_date does not match live_pool.json as_of_date"
+                    )
+                try:
+                    firestore_pool_size = int(firestore_payload.get("pool_size", 0))
+                except Exception:
+                    firestore_pool_size = -1
+                if firestore_pool_size != len(live_pool_symbols):
+                    errors.append("release_manifest.json firestore.payload pool_size does not match live_pool.json")
+                if str(firestore_payload.get("source_project", "")).strip() != live_pool_source_project:
+                    errors.append(
+                        "release_manifest.json firestore.payload source_project does not match live_pool.json"
+                    )
 
     if artifact_manifest_present:
         _append_missing_fields(

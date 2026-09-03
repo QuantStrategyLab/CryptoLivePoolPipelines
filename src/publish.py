@@ -34,6 +34,7 @@ OPTIONAL_OUTPUT_FILES = (
 LIVE_POOL_LEGACY_EXACT_BYTES_CONTRACT_VERSION = (
     "qsl.crypto_live_pool_legacy_exact_bytes.v1"
 )
+CANDIDATE_MANIFEST_CONTRACT_VERSION = "qsl.crypto_live_pool_candidate.v1"
 
 
 @dataclass(frozen=True)
@@ -268,6 +269,7 @@ def ensure_publish_preflight(
     reference_date: Any = None,
     max_age_days: int | None = None,
     require_freshness: bool = True,
+    require_activation_targets: bool = False,
 ) -> dict[str, Any]:
     validation = assert_release_outputs(
         output_dir,
@@ -286,10 +288,11 @@ def ensure_publish_preflight(
         raise ValueError("Publish preflight failed: CLOUD_PROJECT_ID or GCP_PROJECT_ID is required for a real publish.")
     if not settings.cloud_bucket:
         raise ValueError("Publish preflight failed: CLOUD_BUCKET is required for a real publish.")
-    if not str(settings.firestore_collection).strip():
-        raise ValueError("Publish preflight failed: Firestore collection must be configured.")
-    if not str(settings.firestore_document).strip():
-        raise ValueError("Publish preflight failed: Firestore document must be configured.")
+    if require_activation_targets:
+        if not str(settings.firestore_collection).strip():
+            raise ValueError("Publish preflight failed: Firestore collection must be configured.")
+        if not str(settings.firestore_document).strip():
+            raise ValueError("Publish preflight failed: Firestore document must be configured.")
     return validation
 
 
@@ -308,6 +311,10 @@ def build_storage_layout(settings: PublishSettings, artifacts: ReleaseArtifacts)
         "live_pool_legacy.json": artifacts.live_pool_legacy_path,
         "artifact_manifest.json": artifacts.artifact_manifest_path,
     }
+    for filename in OPTIONAL_OUTPUT_FILES:
+        optional_path = artifacts.output_dir / filename
+        if optional_path.exists():
+            filenames[filename] = optional_path
 
     objects: dict[str, dict[str, str]] = {}
     for filename in filenames:
@@ -419,30 +426,34 @@ def build_release_manifest(
     settings: PublishSettings,
     artifacts: ReleaseArtifacts,
     storage_layout: dict[str, Any],
-    firestore_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    if firestore_payload.get("runtime_evidence_identity") != artifacts.runtime_evidence_identity:
-        raise ValueError("Firestore runtime_evidence_identity must equal artifact_manifest.json.")
+    def versioned_object(filename: str) -> dict[str, str]:
+        object_info = storage_layout["objects"][filename]
+        return {
+            "release_object": object_info["release_object"],
+            "release_uri": object_info["release_uri"],
+        }
+
     return {
+        "contract_version": CANDIDATE_MANIFEST_CONTRACT_VERSION,
+        "stage": "candidate",
         "version": artifacts.version,
         "mode": settings.mode,
         "dry_run": settings.dry_run,
         "publish_enabled": settings.enabled,
         "as_of_date": artifacts.as_of_date,
         "release_prefix": storage_layout["release_prefix"],
-        "current_prefix": storage_layout["current_prefix"],
         "artifacts": {
-            "latest_universe": storage_layout["objects"]["latest_universe.json"],
-            "latest_ranking": storage_layout["objects"]["latest_ranking.csv"],
-            "live_pool": storage_layout["objects"]["live_pool.json"],
-            "live_pool_legacy": storage_layout["objects"]["live_pool_legacy.json"],
-            "artifact_manifest": storage_layout["objects"]["artifact_manifest.json"],
+            "latest_universe": versioned_object("latest_universe.json"),
+            "latest_ranking": versioned_object("latest_ranking.csv"),
+            "live_pool": versioned_object("live_pool.json"),
+            "live_pool_legacy": versioned_object("live_pool_legacy.json"),
+            "artifact_manifest": versioned_object("artifact_manifest.json"),
         },
         "runtime_evidence_identity": deepcopy(artifacts.runtime_evidence_identity),
-        "firestore": {
-            "collection": settings.firestore_collection,
-            "document": settings.firestore_document,
-            "payload": firestore_payload,
+        "activation": {
+            "status": "not_activated",
+            "promotion_manifest_required": True,
         },
     }
 
@@ -485,6 +496,7 @@ def upload_release_artifacts(
         opt_path = artifacts.output_dir / opt_file
         if opt_path.exists():
             files[opt_file] = opt_path
+    candidate_objects: list[tuple[str, bytes]] = []
     for filename, local_path in files.items():
         object_info = storage_layout["objects"][filename]
         upload_bytes = (
@@ -492,9 +504,58 @@ def upload_release_artifacts(
             if filename == "live_pool_legacy.json"
             else local_path.read_bytes()
         )
-        store.write_bytes(object_info["release_uri"], upload_bytes)
-        if settings.upload_current_pointer:
-            store.write_bytes(object_info["current_uri"], upload_bytes)
+        candidate_objects.append((object_info["release_uri"], upload_bytes))
+
+    pending_writes: list[tuple[str, bytes]] = []
+    for uri, upload_bytes in candidate_objects:
+        if not store.exists(uri):
+            pending_writes.append((uri, upload_bytes))
+            continue
+        if store.read_bytes(uri) != upload_bytes:
+            raise ValueError(
+                f"Immutable candidate object already exists with different bytes: {uri}"
+            )
+
+    for uri, upload_bytes in pending_writes:
+        store.write_bytes(uri, upload_bytes)
+
+
+def upload_current_release_artifacts(
+    settings: PublishSettings,
+    artifacts: ReleaseArtifacts,
+    storage_layout: dict[str, Any],
+    *,
+    live_pool_legacy_exact_bytes: bytes,
+) -> None:
+    if settings.dry_run:
+        return
+    if not settings.project_id or not settings.cloud_bucket:
+        raise ValueError("CLOUD_PROJECT_ID and CLOUD_BUCKET are required for activation.")
+
+    from quant_platform_kit.cloud import get_object_store
+
+    store = get_object_store()
+    files = {
+        "latest_universe.json": artifacts.latest_universe_path,
+        "latest_ranking.csv": artifacts.latest_ranking_path,
+        "live_pool.json": artifacts.live_pool_path,
+        "live_pool_legacy.json": artifacts.live_pool_legacy_path,
+        "artifact_manifest.json": artifacts.artifact_manifest_path,
+    }
+    for filename in OPTIONAL_OUTPUT_FILES:
+        optional_path = artifacts.output_dir / filename
+        if optional_path.exists():
+            files[filename] = optional_path
+    for filename, local_path in files.items():
+        upload_bytes = (
+            live_pool_legacy_exact_bytes
+            if filename == "live_pool_legacy.json"
+            else local_path.read_bytes()
+        )
+        store.write_bytes(
+            storage_layout["objects"][filename]["current_uri"],
+            upload_bytes,
+        )
 
 
 def publish_firestore_summary(settings: PublishSettings, firestore_payload: dict[str, Any]) -> None:
@@ -511,6 +572,13 @@ def publish_firestore_summary(settings: PublishSettings, firestore_payload: dict
         ) from exc
 
     get_document_store().set(settings.firestore_collection, settings.firestore_document, firestore_payload)
+
+
+def validate_promotion_manifest(promotion_manifest_path: Path | str) -> dict[str, Any]:
+    del promotion_manifest_path
+    raise NotImplementedError(
+        "Promotion Manifest validation is not implemented; release activation is disabled."
+    )
 
 
 def run_release_publish(
@@ -543,11 +611,8 @@ def run_release_publish(
     )
     artifacts = load_release_artifacts(config["paths"].output_dir, settings.mode)
     storage_layout = build_storage_layout(settings, artifacts)
-    firestore_payload = build_firestore_payload(settings, artifacts, storage_layout)
-    live_pool_legacy_exact_bytes = firestore_payload["live_pool_legacy_exact_bytes"][
-        "utf8_text"
-    ].encode("utf-8")
-    manifest = build_release_manifest(settings, artifacts, storage_layout, firestore_payload)
+    live_pool_legacy_exact_bytes = artifacts.live_pool_legacy_path.read_bytes()
+    manifest = build_release_manifest(settings, artifacts, storage_layout)
     manifest_path = write_release_manifest(artifacts.output_dir, manifest)
     validation = assert_release_outputs(
         artifacts.output_dir,
@@ -563,7 +628,6 @@ def run_release_publish(
     artifacts = load_release_artifacts(artifacts.output_dir, settings.mode)
     if (
         manifest.get("runtime_evidence_identity") != artifacts.runtime_evidence_identity
-        or firestore_payload.get("runtime_evidence_identity") != artifacts.runtime_evidence_identity
     ):
         raise ValueError("Runtime evidence identity changed before publish.")
     if (
@@ -578,13 +642,68 @@ def run_release_publish(
         storage_layout,
         live_pool_legacy_exact_bytes=live_pool_legacy_exact_bytes,
     )
-    publish_firestore_summary(settings, firestore_payload)
 
     return {
+        "stage": "candidate",
+        "settings": settings,
+        "artifacts": artifacts,
+        "storage_layout": storage_layout,
+        "manifest_path": manifest_path,
+        "validation": validation,
+    }
+
+
+def run_release_activation(
+    config: dict[str, Any],
+    *,
+    promotion_manifest_path: Path | str,
+    mode: str | None = None,
+    dry_run: bool = False,
+    project_id: str | None = None,
+    cloud_bucket: str | None = None,
+    firestore_collection: str | None = None,
+    firestore_document: str | None = None,
+    max_age_days: int | None = 45,
+    require_freshness: bool = True,
+) -> dict[str, Any]:
+    promotion_manifest = validate_promotion_manifest(promotion_manifest_path)
+    settings = resolve_publish_settings(
+        config,
+        mode=mode,
+        dry_run=dry_run,
+        project_id=project_id,
+        cloud_bucket=cloud_bucket,
+        firestore_collection=firestore_collection,
+        firestore_document=firestore_document,
+    )
+    validation = ensure_publish_preflight(
+        settings,
+        config["paths"].output_dir,
+        expected_pool_size=int(config["export"]["live_pool_size"]),
+        max_age_days=max_age_days,
+        require_freshness=require_freshness,
+        require_activation_targets=True,
+    )
+    artifacts = load_release_artifacts(config["paths"].output_dir, settings.mode)
+    storage_layout = build_storage_layout(settings, artifacts)
+    firestore_payload = build_firestore_payload(settings, artifacts, storage_layout)
+    live_pool_legacy_exact_bytes = firestore_payload["live_pool_legacy_exact_bytes"][
+        "utf8_text"
+    ].encode("utf-8")
+
+    upload_current_release_artifacts(
+        settings,
+        artifacts,
+        storage_layout,
+        live_pool_legacy_exact_bytes=live_pool_legacy_exact_bytes,
+    )
+    publish_firestore_summary(settings, firestore_payload)
+    return {
+        "stage": "activated",
+        "promotion_manifest": promotion_manifest,
         "settings": settings,
         "artifacts": artifacts,
         "storage_layout": storage_layout,
         "firestore_payload": firestore_payload,
-        "manifest_path": manifest_path,
         "validation": validation,
     }

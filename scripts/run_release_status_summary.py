@@ -137,6 +137,7 @@ def build_release_status_payload(
         status = "ok"
 
     firestore = manifest.get("firestore", {}) if isinstance(manifest.get("firestore"), dict) else {}
+    activation = manifest.get("activation", {}) if isinstance(manifest.get("activation"), dict) else {}
 
     return {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -157,6 +158,8 @@ def build_release_status_payload(
             "ranking_preview": ranking_preview_rows,
         },
         "publish_summary": {
+            "stage": str(manifest.get("stage", "activated")).strip(),
+            "activation_status": str(activation.get("status", "activated")).strip(),
             "dry_run": bool(manifest.get("dry_run")),
             "publish_enabled": bool(manifest.get("publish_enabled")),
             "release_prefix": str(manifest.get("release_prefix", "")).strip(),
@@ -220,6 +223,8 @@ Generated: {payload['generated_at_utc']}
 
 ## Publish summary
 
+- stage: {publish['stage']}
+- activation_status: {publish['activation_status']}
 - dry_run: {publish['dry_run']}
 - publish_enabled: {publish['publish_enabled']}
 - release_prefix: {publish['release_prefix'] or 'n/a'}

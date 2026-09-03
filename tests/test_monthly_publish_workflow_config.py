@@ -7,6 +7,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "monthly_publish.yml"
+ACTIVATION_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "activate-release.yml"
 LIFECYCLE_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "publish-lifecycle-inputs.yml"
 README_ZH_PATH = PROJECT_ROOT / "README.zh-CN.md"
 QPK_DEPENDENCY = (
@@ -19,6 +20,10 @@ PINNED_ACTIONS = (
     "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7",
 )
 EXPECTED_REMOTE_ACTIONS = {
+    ACTIVATION_WORKFLOW_PATH: {
+        "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),
+        "actions/setup-python": ("ece7cb06caefa5fff74198d8649806c4678c61a1", "v6"),
+    },
     WORKFLOW_PATH: {
         "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),
         "actions/create-github-app-token": ("bcd2ba49218906704ab6c1aa796996da409d3eb1", "v3"),
@@ -94,6 +99,18 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertNotIn("/repos/{target_repository}/dispatches", workflow)
         self.assertNotIn("LEGACY_API_REVIEW_ENABLED", workflow)
         self.assertNotIn("/actions/workflows/ai_review.yml/dispatches", workflow)
+
+    def test_scheduled_publish_is_candidate_only_and_activation_is_manual_fail_closed(self) -> None:
+        scheduled_workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+        activation_workflow = ACTIVATION_WORKFLOW_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("scripts/publish_release.py --candidate-only", scheduled_workflow)
+        self.assertNotIn("--activate", scheduled_workflow)
+        self.assertIn("workflow_dispatch:", activation_workflow)
+        self.assertNotIn("schedule:", activation_workflow)
+        self.assertIn("scripts/publish_release.py --activate", activation_workflow)
+        self.assertIn("--promotion-manifest", activation_workflow)
+        self.assertNotIn("google-github-actions/auth", activation_workflow)
 
     def test_privileged_workflows_pin_remote_actions_to_full_commit_shas(self) -> None:
         uses_pattern = re.compile(r"^\s*uses:\s*([^\s#]+)(?:\s+#\s*([^\s#]+))?\s*$", re.MULTILINE)

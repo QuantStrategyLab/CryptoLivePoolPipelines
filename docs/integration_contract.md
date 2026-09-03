@@ -3,15 +3,20 @@
 This document defines the production contract exposed by `CryptoLivePoolPipelines` to downstream strategy systems.
 The current v1 artifact namespace is `crypto-live-pool-pipelines`.
 
-The upstream project publishes a monthly `core_major` live pool and exposes it through:
+The upstream project builds a monthly `core_major` live-pool candidate and exposes activated releases through:
 
 1. local build artifacts under `data/output/`
-2. versioned and current objects in GCS
-3. a lightweight Firestore summary document
+2. immutable versioned candidate objects in GCS
+3. current GCS pointers and a lightweight Firestore summary document only after activation
 
 ## Authority Boundary
 
 `CryptoLivePoolPipelines` owns monthly live-pool membership, ranking, and order for `crypto_live_pool_rotation`. Downstream strategy and execution repositories should treat the ordered `symbols` list from `live_pool.json` or `artifact_manifest.json` as canonical.
+
+The scheduled workflow is candidate-only. A candidate becomes canonical only
+after the manual activation path validates an immutable Promotion Manifest. That
+validator is not implemented in this slice, so activation currently fails closed
+before any current-pointer or Firestore write.
 
 Downstream systems may apply runtime execution gates, sell rules, top-N selection, sizing, and degraded-source policy after artifact validation. They should not recalculate monthly membership or replace the published order from local indicators. `latest_ranking.csv` and `selection_meta` are upstream evidence and diagnostics; `live_pool.json` plus `artifact_manifest.json` are the stable execution contract.
 
@@ -139,7 +144,17 @@ Optional additive research extension:
 - example fields include `final_score`, `confidence`, and `current_rank`
 - downstream should treat this as optional enrichment, not as a required contract field
 
+### `release_manifest.json`
+
+Scheduled builds emit `qsl.crypto_live_pool_candidate.v1` with
+`stage=candidate`, `activation.status=not_activated`, and versioned artifact URIs
+only. Candidate manifests must not contain `current_prefix`, Firestore targets,
+or per-artifact current URIs.
+
 ## Firestore Contract
+
+This is an activation-only contract. Scheduled candidate publication never
+writes this document.
 
 Collection and document defaults:
 
@@ -198,7 +213,7 @@ gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/live_pool_le
 gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/artifact_manifest.json
 ```
 
-Current pointers:
+Current pointers (activation only):
 
 ```text
 gs://<bucket>/crypto-live-pool-pipelines/current/latest_universe.json

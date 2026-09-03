@@ -390,6 +390,8 @@ def build_review_payload(inputs: dict[str, Any]) -> dict[str, Any]:
             "source_project": str(release_official.get("source_project", live_pool.get("source_project", ""))),
         },
         "publish": {
+            "stage": str(manifest.get("stage", "activated")),
+            "activation_status": str(manifest.get("activation", {}).get("status", "activated")),
             "dry_run": bool(manifest.get("dry_run")),
             "publish_enabled": bool(manifest.get("publish_enabled")),
             "release_prefix": str(manifest.get("release_prefix", "")),
@@ -473,6 +475,8 @@ Generated: {payload['generated_at_utc']}
 
 ## Publish summary
 
+- stage: {publish['stage']}
+- activation_status: {publish['activation_status']}
 - dry_run: {publish['dry_run']}
 - publish_enabled: {publish['publish_enabled']}
 - release_prefix: {publish['release_prefix'] or 'n/a'}
