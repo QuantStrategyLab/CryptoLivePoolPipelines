@@ -307,7 +307,7 @@ requires-dist = [
     { name = "pandas", specifier = "==3.0.3" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
     { name = "pyyaml", specifier = "==6.0.3" },
-    { name = "quant-platform-kit", git = "https://github.com/QuantStrategyLab/QuantPlatformKit.git?rev=b13e28759a880dcb446dbfbc580dc032333b065e" },
+    { name = "quant-platform-kit", git = "https://github.com/QuantStrategyLab/QuantPlatformKit.git?rev=ac1d07c6b0188c8b0abc682e99315bdc056879b5" },
     { name = "requests", specifier = "==2.34.2" },
     { name = "scikit-learn", specifier = "==1.9.0" },
     { name = "scipy", specifier = "==1.17.1" },
@@ -1256,7 +1256,7 @@ wheels = [
 [[package]]
 name = "quant-platform-kit"
 version = "0.10.0"
-source = { git = "https://github.com/QuantStrategyLab/QuantPlatformKit.git?rev=b13e28759a880dcb446dbfbc580dc032333b065e#b13e28759a880dcb446dbfbc580dc032333b065e" }
+source = { git = "https://github.com/QuantStrategyLab/QuantPlatformKit.git?rev=ac1d07c6b0188c8b0abc682e99315bdc056879b5#ac1d07c6b0188c8b0abc682e99315bdc056879b5" }
 
 [[package]]
 name = "requests"
