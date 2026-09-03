@@ -1,0 +1,47 @@
+name: CC0 Native Auto-Merge Pilot
+
+"on":
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: cc0-native-auto-merge-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  classify-and-enable:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.status == 'completed' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'quantcrossrepoautomation[bot]' &&
+      github.event.workflow_run.triggering_actor.login == 'quantcrossrepoautomation[bot]' &&
+      startsWith(github.event.workflow_run.head_branch, 'codex/monthly-review-issue-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted classifier
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      - name: Classify exact PR head
+        id: classify
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/classify_cc0_native_auto_merge.py --event "${GITHUB_EVENT_PATH}"
+
+      - name: Enable native squash auto-merge
+        if: steps.classify.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.classify.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.classify.outputs.head_sha }}
+        run: |
+          gh pr merge "${PR_NUMBER}" --repo "${GITHUB_REPOSITORY}" --auto --squash --match-head-commit "${HEAD_SHA}"
