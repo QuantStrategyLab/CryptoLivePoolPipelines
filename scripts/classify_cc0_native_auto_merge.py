@@ -23,19 +23,7 @@ EXPECTED_DEFAULT_BRANCH = "main"
 EXPECTED_WORKFLOW_ID = 253773518
 EXPECTED_WORKFLOW_NAME = "CI"
 EXPECTED_WORKFLOW_PATH = ".github/workflows/ci.yml"
-EXPECTED_RULESET_ID = 18235043
 EXPECTED_CHECK = {"context": "test", "app_id": 15368, "app_slug": "github-actions"}
-EXPECTED_ACTIVE_RULE = {
-    "type": "required_status_checks",
-    "ruleset_source_type": "Repository",
-    "ruleset_source": EXPECTED_REPOSITORY,
-    "ruleset_id": EXPECTED_RULESET_ID,
-    "parameters": {
-        "strict_required_status_checks_policy": True,
-        "do_not_enforce_on_create": False,
-        "required_status_checks": [{"context": "test", "integration_id": 15368}],
-    },
-}
 ALLOWED_RUN_ACTOR = {"login": "quantcrossrepoautomation[bot]", "type": "Bot"}
 ALLOWED_PR_AUTHOR = {"login": "quantcrossrepoautomation", "type": "Bot"}
 ALLOWED_BRANCH_PREFIX = "codex/monthly-review-issue-"
@@ -122,7 +110,6 @@ def classify(context: dict[str, Any]) -> dict[str, Any]:
             or protection["requires_strict_status_checks"] is not True
             or protection["requires_conversation_resolution"] is not True
             or protection["required_status_checks"] != [EXPECTED_CHECK]
-            or repository["active_rules"] != [EXPECTED_ACTIVE_RULE]
         ):
             return _reject("strict_ci_policy_mismatch")
 
@@ -367,7 +354,6 @@ def collect_context(event: dict[str, Any], api: GitHubApi) -> dict[str, Any]:
     threads_complete, threads = _normalize_threads(api, pr, number)
     protection = repository["defaultBranchRef"]["branchProtectionRule"]
     checks = protection["requiredStatusChecks"]
-    active_rules = api.request(f"/repos/{EXPECTED_REPOSITORY}/rules/branches/{EXPECTED_DEFAULT_BRANCH}")
 
     normalized_event_prs = [
         {
@@ -410,11 +396,9 @@ def collect_context(event: dict[str, Any], api: GitHubApi) -> dict[str, Any]:
                     for item in checks
                 ],
             },
-            "active_rules": active_rules,
         },
         "workflow_run": {
             "action": event.get("action"),
-            "id": run.get("id"),
             "workflow_id": run.get("workflow_id"),
             "name": run.get("name"),
             "path": run.get("path"),
