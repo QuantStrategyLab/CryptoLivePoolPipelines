@@ -373,8 +373,19 @@ class ReleaseContractValidationTests(unittest.TestCase):
                 def read_bytes(self, uri: str) -> bytes:
                     return uploaded[uri]
 
+                def create_text(
+                    self,
+                    uri: str,
+                    payload: str,
+                    content_type: str = "text/plain",
+                ) -> bool:
+                    if uri in uploaded:
+                        return False
+                    uploaded[uri] = payload.encode("utf-8")
+                    return True
+
                 def write_bytes(self, uri: str, payload: bytes) -> None:
-                    uploaded[uri] = payload
+                    raise AssertionError("immutable candidates require atomic create")
 
             with patch(
                 "quant_platform_kit.cloud.get_object_store",
@@ -433,6 +444,53 @@ class ReleaseContractValidationTests(unittest.TestCase):
             with patch(
                 "quant_platform_kit.cloud.get_object_store",
                 return_value=FakeStore(),
+            ), self.assertRaisesRegex(ValueError, "Immutable candidate object"):
+                upload_release_artifacts(
+                    settings,
+                    artifacts,
+                    storage_layout,
+                    live_pool_legacy_exact_bytes=artifacts.live_pool_legacy_path.read_bytes(),
+                )
+
+    def test_candidate_upload_rejects_concurrent_conflicting_create(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.build_runtime_identity_outputs(Path(tmp_dir))
+            artifacts = load_release_artifacts(output_dir, "core_major")
+            settings = PublishSettings(
+                enabled=True,
+                dry_run=False,
+                mode="core_major",
+                project_id="test-project",
+                cloud_bucket="test-bucket",
+                cloud_root_prefix="crypto-live-pool-pipelines",
+                firestore_collection="strategy",
+                firestore_document="CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL",
+                source_project="crypto-live-pool-pipelines",
+                upload_current_pointer=True,
+            )
+            storage_layout = build_storage_layout(settings, artifacts)
+
+            class RacingStore:
+                def exists(self, uri: str) -> bool:
+                    return False
+
+                def create_text(
+                    self,
+                    uri: str,
+                    payload: str,
+                    content_type: str = "text/plain",
+                ) -> bool:
+                    return False
+
+                def read_bytes(self, uri: str) -> bytes:
+                    return b'{"concurrent": "different"}\n'
+
+                def write_bytes(self, uri: str, payload: bytes) -> None:
+                    raise AssertionError("immutable candidates require atomic create")
+
+            with patch(
+                "quant_platform_kit.cloud.get_object_store",
+                return_value=RacingStore(),
             ), self.assertRaisesRegex(ValueError, "Immutable candidate object"):
                 upload_release_artifacts(
                     settings,

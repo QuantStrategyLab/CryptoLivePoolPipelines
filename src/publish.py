@@ -506,18 +506,30 @@ def upload_release_artifacts(
         )
         candidate_objects.append((object_info["release_uri"], upload_bytes))
 
-    pending_writes: list[tuple[str, bytes]] = []
+    pending_writes: list[tuple[str, bytes, str]] = []
     for uri, upload_bytes in candidate_objects:
         if not store.exists(uri):
-            pending_writes.append((uri, upload_bytes))
+            try:
+                upload_text = upload_bytes.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError(
+                    f"Immutable candidate object must contain UTF-8 text: {uri}"
+                ) from exc
+            pending_writes.append((uri, upload_bytes, upload_text))
             continue
         if store.read_bytes(uri) != upload_bytes:
             raise ValueError(
                 f"Immutable candidate object already exists with different bytes: {uri}"
             )
 
-    for uri, upload_bytes in pending_writes:
-        store.write_bytes(uri, upload_bytes)
+    for uri, upload_bytes, upload_text in pending_writes:
+        content_type = "application/json" if uri.endswith(".json") else "text/csv"
+        if store.create_text(uri, upload_text, content_type=content_type):
+            continue
+        if store.read_bytes(uri) != upload_bytes:
+            raise ValueError(
+                f"Immutable candidate object was concurrently created with different bytes: {uri}"
+            )
 
 
 def upload_current_release_artifacts(
