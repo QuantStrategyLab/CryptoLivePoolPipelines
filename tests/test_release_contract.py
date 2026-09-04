@@ -19,6 +19,12 @@ from src.publish import (
     load_release_artifacts,
     upload_release_artifacts,
 )
+from src.model_run_manifest import (
+    build_model_run_manifest,
+    canonical_model_run_manifest_digest,
+    read_dependency_lock,
+    write_model_run_manifest,
+)
 from src.release_contract import validate_release_outputs
 
 
@@ -50,6 +56,50 @@ def build_publish_settings() -> PublishSettings:
 
 
 class ReleaseContractValidationTests(unittest.TestCase):
+    @staticmethod
+    def _model_run_manifest() -> dict[str, object]:
+        train_index = pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2026-03-11"), "BTCUSDT"),
+                (pd.Timestamp("2026-03-11"), "ETHUSDT"),
+            ],
+            names=["date", "symbol"],
+        )
+        score_index = pd.MultiIndex.from_tuples(
+            [(pd.Timestamp("2026-03-13"), "BTCUSDT")],
+            names=["date", "symbol"],
+        )
+        return build_model_run_manifest(
+            model_family="crypto_live_pool_dual_regressor",
+            backends={
+                "linear": {"name": "numpy_ridge", "version": "2.4.6"},
+                "ml": {"name": "numpy_ridge", "version": "2.4.6"},
+            },
+            feature_columns=["feature_a"],
+            label_column="blended_target",
+            train_df=pd.DataFrame(
+                {"feature_a": [1.0, 2.0], "blended_target": [0.1, 0.2]},
+                index=train_index,
+            ),
+            predictions=pd.DataFrame(
+                {"linear_score_raw": [0.3], "ml_score_raw": [0.4]},
+                index=score_index,
+            ),
+            config={
+                "data": {"start_date": "2020-01-01", "end_date": "2026-03-13"},
+                "universe": {"live_mode": "core_major"},
+                "feature_engineering": {"breadth_min_names": 10},
+                "labels": {"horizons": [1]},
+                "walkforward": {"train_window_days": 2},
+                "model": {"execution_mode": "production", "random_state": 42},
+            },
+            source_revision="a" * 40,
+            seed=42,
+            dependency_lock=read_dependency_lock(
+                Path(__file__).resolve().parents[1] / "requirements-lock.txt"
+            ),
+        )
+
     def build_outputs(
         self,
         root: Path,
@@ -155,6 +205,14 @@ class ReleaseContractValidationTests(unittest.TestCase):
                 artifact_manifest = json.loads(
                     (output_dir / "artifact_manifest.json").read_text(encoding="utf-8")
                 )
+                model_run_manifest = self._model_run_manifest()
+                model_run_digest = write_model_run_manifest(
+                    output_dir / "model_run_manifest.json", model_run_manifest
+                )
+                self.assertEqual(
+                    model_run_digest,
+                    canonical_model_run_manifest_digest(model_run_manifest),
+                )
                 runtime_evidence_identity = {
                     "strategy_profile": "crypto_live_pool_rotation",
                     "mode": mode,
@@ -163,7 +221,13 @@ class ReleaseContractValidationTests(unittest.TestCase):
                     "artifact_contract": artifact_manifest["contract_version"],
                     "artifact_version": version,
                     "artifacts": artifact_manifest["artifacts"],
+                    "model_run_manifest": {
+                        "contract_version": model_run_manifest["contract_version"],
+                        "path": "model_run_manifest.json",
+                        "sha256": model_run_digest,
+                    },
                 }
+                artifact_manifest["model_run_manifest"] = model_run_manifest
                 artifact_manifest["runtime_evidence_identity"] = runtime_evidence_identity
                 write_json(output_dir / "artifact_manifest.json", artifact_manifest)
             write_json(
@@ -330,6 +394,7 @@ class ReleaseContractValidationTests(unittest.TestCase):
             validated_bytes = firestore_payload["live_pool_legacy_exact_bytes"][
                 "utf8_text"
             ].encode("utf-8")
+            model_bytes = artifacts.model_run_manifest_path.read_bytes()
             artifacts.live_pool_legacy_path.write_bytes(b'{"mutated": true}\n')
 
             uploaded: dict[str, bytes] = {}
@@ -363,6 +428,12 @@ class ReleaseContractValidationTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(validated_bytes).hexdigest(), manifest_digest)
         self.assertEqual(hashlib.sha256(release_bytes).hexdigest(), manifest_digest)
         self.assertEqual(identity_digest, manifest_digest)
+
+        model_objects = storage_layout["objects"]["model_run_manifest.json"]
+        model_digest = artifacts.runtime_evidence_identity["model_run_manifest"]["sha256"]
+        self.assertEqual(uploaded[model_objects["release_uri"]], model_bytes)
+        self.assertEqual(uploaded[model_objects["current_uri"]], model_bytes)
+        self.assertEqual(hashlib.sha256(model_bytes).hexdigest(), model_digest)
 
     def test_firestore_payload_rejects_mutated_legacy_bytes_with_unchanged_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

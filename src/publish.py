@@ -24,6 +24,7 @@ REQUIRED_OUTPUT_FILES = (
     "latest_ranking.csv",
     "live_pool.json",
     "live_pool_legacy.json",
+    "model_run_manifest.json",
     "artifact_manifest.json",
 )
 
@@ -59,6 +60,7 @@ class ReleaseArtifacts:
     latest_ranking_path: Path
     live_pool_path: Path
     live_pool_legacy_path: Path
+    model_run_manifest_path: Path
     artifact_manifest_path: Path
     latest_universe: dict[str, Any]
     latest_ranking: pd.DataFrame
@@ -186,10 +188,10 @@ def _validate_runtime_evidence_identity(
         raise ValueError("Runtime identity input_timestamp mismatch.")
     model_run_manifest = artifact_manifest.get("model_run_manifest")
     model_run_binding = identity.get("model_run_manifest")
-    if model_run_manifest is None and model_run_binding is None:
-        return deepcopy(identity)
+    if not isinstance(model_run_manifest, dict):
+        raise ValueError("artifact_manifest.json model_run_manifest is required.")
     if not isinstance(model_run_binding, dict):
-        raise ValueError("Runtime identity model_run_manifest binding is invalid.")
+        raise ValueError("Runtime identity model_run_manifest binding is required.")
     validated_model_run_manifest = validate_model_run_manifest(model_run_manifest)
     if validated_model_run_manifest["source"]["revision"] != identity.get("source_revision"):
         raise ValueError("Runtime identity model_run_manifest source revision mismatch.")
@@ -250,6 +252,7 @@ def load_release_artifacts(output_dir: Path | str, mode: str) -> ReleaseArtifact
         latest_ranking_path=paths["latest_ranking.csv"],
         live_pool_path=paths["live_pool.json"],
         live_pool_legacy_path=paths["live_pool_legacy.json"],
+        model_run_manifest_path=paths["model_run_manifest.json"],
         artifact_manifest_path=paths["artifact_manifest.json"],
         latest_universe=latest_universe,
         latest_ranking=latest_ranking,
@@ -306,6 +309,7 @@ def build_storage_layout(settings: PublishSettings, artifacts: ReleaseArtifacts)
         "latest_ranking.csv": artifacts.latest_ranking_path,
         "live_pool.json": artifacts.live_pool_path,
         "live_pool_legacy.json": artifacts.live_pool_legacy_path,
+        "model_run_manifest.json": artifacts.model_run_manifest_path,
         "artifact_manifest.json": artifacts.artifact_manifest_path,
     }
 
@@ -436,6 +440,7 @@ def build_release_manifest(
             "latest_ranking": storage_layout["objects"]["latest_ranking.csv"],
             "live_pool": storage_layout["objects"]["live_pool.json"],
             "live_pool_legacy": storage_layout["objects"]["live_pool_legacy.json"],
+            "model_run_manifest": storage_layout["objects"]["model_run_manifest.json"],
             "artifact_manifest": storage_layout["objects"]["artifact_manifest.json"],
         },
         "runtime_evidence_identity": deepcopy(artifacts.runtime_evidence_identity),
@@ -478,6 +483,7 @@ def upload_release_artifacts(
         "latest_ranking.csv": artifacts.latest_ranking_path,
         "live_pool.json": artifacts.live_pool_path,
         "live_pool_legacy.json": artifacts.live_pool_legacy_path,
+        "model_run_manifest.json": artifacts.model_run_manifest_path,
         "artifact_manifest.json": artifacts.artifact_manifest_path,
     }
     # Include optional files if present

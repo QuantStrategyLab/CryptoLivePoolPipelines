@@ -40,6 +40,9 @@ Required stable fields:
 - `generated_at`
 - `primary_artifact = live_pool`
 - `artifacts`
+- `model_run_manifest` and `runtime_evidence_identity.model_run_manifest`
+
+`model_run_manifest.json` is required for candidate and production releases. Its canonical digest is bound by `runtime_evidence_identity`; it records the actual backend, model family, model configuration, training-data digest, and source revision. A missing or mismatched binding is rejected.
 
 The `artifacts` mapping includes relative file paths and SHA-256 checksums for:
 
@@ -195,6 +198,7 @@ gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/latest_unive
 gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/latest_ranking.csv
 gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/live_pool.json
 gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/live_pool_legacy.json
+gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/model_run_manifest.json
 gs://<bucket>/crypto-live-pool-pipelines/releases/<YYYY-MM-DD-mode>/artifact_manifest.json
 ```
 
@@ -205,6 +209,7 @@ gs://<bucket>/crypto-live-pool-pipelines/current/latest_universe.json
 gs://<bucket>/crypto-live-pool-pipelines/current/latest_ranking.csv
 gs://<bucket>/crypto-live-pool-pipelines/current/live_pool.json
 gs://<bucket>/crypto-live-pool-pipelines/current/live_pool_legacy.json
+gs://<bucket>/crypto-live-pool-pipelines/current/model_run_manifest.json
 gs://<bucket>/crypto-live-pool-pipelines/current/artifact_manifest.json
 ```
 
