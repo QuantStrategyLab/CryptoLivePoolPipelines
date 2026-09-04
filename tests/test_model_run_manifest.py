@@ -109,6 +109,13 @@ class ModelRunManifestTests(unittest.TestCase):
         with patch("src.models.lgb", None), self.assertRaises(ModelBackendUnavailableError):
             fit_predict_models(train, score, ["feature_a"], config)
 
+    def test_candidate_backend_unavailable_fails_closed_without_fallback(self) -> None:
+        train, score = self._frames()
+        config = self._config(execution_mode="candidate", ml_backend="lightgbm")
+
+        with patch("src.models.lgb", None), self.assertRaises(ModelBackendUnavailableError):
+            fit_predict_models(train, score, ["feature_a"], config)
+
     def test_production_backend_version_drift_fails_closed(self) -> None:
         train, score = self._frames()
         with patch("src.models._backend_version", return_value="0.0.0"), self.assertRaises(
@@ -339,6 +346,14 @@ class ModelRunManifestTests(unittest.TestCase):
             )
             (output_dir / "model_run_manifest.json").write_bytes(b"{}")
             with self.assertRaisesRegex(ValueError, "model_run_manifest digest mismatch"):
+                load_release_artifacts(output_dir, "core_major")
+
+            artifact_manifest.pop("model_run_manifest")
+            artifact_manifest["runtime_evidence_identity"].pop("model_run_manifest")
+            (output_dir / "artifact_manifest.json").write_text(
+                json.dumps(artifact_manifest), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "model_run_manifest is required"):
                 load_release_artifacts(output_dir, "core_major")
 
     def test_source_revision_must_match_runtime_identity_in_export_publish_and_release(self) -> None:

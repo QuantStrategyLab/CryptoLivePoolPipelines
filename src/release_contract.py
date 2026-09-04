@@ -75,6 +75,7 @@ REQUIRED_RUNTIME_EVIDENCE_IDENTITY_FIELDS = (
     "artifact_contract",
     "artifact_version",
     "artifacts",
+    "model_run_manifest",
 )
 
 
@@ -244,7 +245,8 @@ def _validate_runtime_evidence_identity(
 
     model_run_manifest = artifact_manifest.get("model_run_manifest")
     model_run_binding = identity.get("model_run_manifest")
-    if model_run_manifest is None and model_run_binding is None:
+    if not isinstance(model_run_manifest, dict):
+        errors.append("artifact_manifest.json model_run_manifest is required")
         return
     if not isinstance(model_run_binding, dict):
         errors.append(f"{label} model_run_manifest binding must be an object")
