@@ -27,10 +27,19 @@ def resolve_walkforward_purge_days(config: dict[str, Any]) -> int:
     """Resolve the walk-forward label purge/embargo in trading days."""
     walk_cfg = config.get("walkforward", {})
     configured = walk_cfg.get("purge_days")
+    horizons = [int(horizon) for horizon in config.get("labels", {}).get("horizons", [])]
+    minimum_purge = max(horizons, default=0)
     if configured is None:
-        horizons = [int(horizon) for horizon in config.get("labels", {}).get("horizons", [])]
-        return max(horizons) if horizons else 0
-    return max(0, int(configured))
+        return minimum_purge
+    try:
+        purge_days = int(configured)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("walkforward.purge_days must be a non-negative integer.") from None
+    if isinstance(configured, bool) or (not isinstance(configured, str) and purge_days != configured):
+        raise ValueError("walkforward.purge_days must be a non-negative integer.")
+    if purge_days < max(0, minimum_purge):
+        raise ValueError("walkforward.purge_days must cover every label horizon and be non-negative.")
+    return purge_days
 
 
 def build_walkforward_windows(dates: list[pd.Timestamp], config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -40,6 +49,8 @@ def build_walkforward_windows(dates: list[pd.Timestamp], config: dict[str, Any])
     test_window = int(walk_cfg["test_window_days"])
     step_days = int(walk_cfg["step_days"])
     purge_days = resolve_walkforward_purge_days(config)
+    if purge_days >= train_window:
+        raise ValueError("walkforward.purge_days must leave at least one training date.")
 
     ordered_dates = list(pd.DatetimeIndex(dates).sort_values().unique())
     if len(ordered_dates) <= train_window:
@@ -51,7 +62,7 @@ def build_walkforward_windows(dates: list[pd.Timestamp], config: dict[str, Any])
     while cursor < len(ordered_dates):
         train_start_position = max(0, cursor - train_window)
         train_end_position = cursor - 1
-        effective_train_end_position = max(train_start_position, train_end_position - purge_days)
+        effective_train_end_position = train_end_position - purge_days
         train_start = ordered_dates[train_start_position]
         train_end = ordered_dates[train_end_position]
         effective_train_end = ordered_dates[effective_train_end_position]
@@ -118,6 +129,15 @@ def run_walkforward_scoring(
     dates = list(panel.index.get_level_values("date").unique().sort_values())
     windows = build_walkforward_windows(dates, config)
     aggregation_mode = str(config.get("walkforward", {}).get("prediction_aggregation", "mean")).lower()
+    label_dates = pd.Series(panel.index.get_level_values("date"), index=panel.index).sort_index()
+    horizons = [int(horizon) for horizon in config.get("labels", {}).get("horizons", [])]
+    label_ends = pd.concat(
+        [label_dates.groupby(level="symbol").shift(-horizon) for horizon in horizons] or [label_dates],
+        axis=1,
+    ).max(axis=1).reindex(panel.index)
+    # Labels shift within each symbol, not the union calendar. Cross-sectional
+    # ranks also depend on the latest outcome of every eligible peer that day.
+    label_ends = label_ends.where(panel["in_universe"]).groupby(level="date").transform("max")
 
     all_predictions = []
     window_rows = []
@@ -129,7 +149,11 @@ def run_walkforward_scoring(
             & panel["in_universe"]
             & panel["blended_target"].notna()
         )
-        train_mask = pre_purge_train_mask & (date_index <= window["effective_train_end"])
+        train_mask = (
+            pre_purge_train_mask
+            & (date_index <= window["effective_train_end"])
+            & (label_ends < window["test_start"])
+        )
         test_mask = (
             (date_index >= window["test_start"])
             & (date_index <= window["test_end"])
