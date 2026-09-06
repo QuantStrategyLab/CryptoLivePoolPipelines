@@ -34,7 +34,7 @@ def export_lifecycle_inputs(panel: pd.DataFrame, output_dir: Path) -> dict[str, 
     frame["symbol"] = frame["symbol"].astype(str).str.strip().str.upper()
     today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
     frame = frame.loc[frame["date"] < today]
-    lifecycle_panel = frame[["date", "symbol", *PANEL_COLUMNS]].dropna(subset=["date", "open"])
+    lifecycle_panel = frame[["date", "symbol", *PANEL_COLUMNS]].dropna(subset=["date"])
     scored_panel = lifecycle_panel.dropna(subset=["final_score"])
     if scored_panel.empty:
         raise ValueError("research panel has no scored lifecycle rows")

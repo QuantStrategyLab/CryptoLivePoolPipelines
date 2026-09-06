@@ -9,9 +9,11 @@ import pandas as pd
 from src.backtest import (
     aggregate_walkforward_predictions,
     build_walkforward_windows,
+    resolve_walkforward_purge_days,
     run_walkforward_scoring,
 )
 from src.evaluation import evaluate_live_pool_shadow, summarize_live_pool_shadow
+from src.labels import build_labels
 from src.models import ModelPredictionResult
 
 
@@ -48,7 +50,7 @@ class WalkforwardValidationTests(unittest.TestCase):
                 "train_window_days": 4,
                 "test_window_days": 2,
                 "step_days": 2,
-                "purge_days": 1,
+                "purge_days": 2,
                 "prediction_aggregation": "mean",
             },
             "labels": {"horizons": [1, 2]},
@@ -78,10 +80,107 @@ class WalkforwardValidationTests(unittest.TestCase):
         with patch("src.backtest.fit_predict_models", fake_fit_predict_models):
             scored, window_summary = run_walkforward_scoring(panel, ["feature_a"], config)
 
-        self.assertEqual(captured_train_max_dates[0], pd.Timestamp("2024-01-03"))
+        self.assertEqual(captured_train_max_dates[0], pd.Timestamp("2024-01-02"))
         self.assertEqual(int(window_summary.iloc[0]["train_rows_pre_purge"]), 8)
-        self.assertEqual(int(window_summary.iloc[0]["purged_train_rows"]), 2)
+        self.assertEqual(int(window_summary.iloc[0]["purged_train_rows"]), 4)
         self.assertEqual(int(scored["prediction_window_count"].max()), 1)
+
+    def test_purge_rejects_short_or_invalid_override_without_coercing_it(self) -> None:
+        for purge in (0, 1, -1, 2.5, True, False, "bad", "2.5", float("nan"), float("inf"), [], {}):
+            with self.subTest(purge=purge):
+                config = {"walkforward": {"purge_days": purge}, "labels": {"horizons": [1, 2]}}
+                with self.assertRaises(ValueError):
+                    resolve_walkforward_purge_days(config)
+                self.assertIs(config["walkforward"]["purge_days"], purge)
+
+    def test_purge_keeps_default_equal_and_larger_integer_values(self) -> None:
+        for purge, expected in ((None, 2), (2, 2), (3, 3), ("2", 2), (2.0, 2)):
+            with self.subTest(purge=purge):
+                config = {"walkforward": {"purge_days": purge}, "labels": {"horizons": [1, 2]}}
+                self.assertEqual(resolve_walkforward_purge_days(config), expected)
+                self.assertIs(config["walkforward"]["purge_days"], purge)
+        self.assertEqual(resolve_walkforward_purge_days({}), 0)
+
+    def test_purge_cannot_clamp_an_empty_training_window_to_one_row(self) -> None:
+        dates = list(pd.date_range("2024-01-01", periods=8, freq="D"))
+        for purge in (4, 5, 20):
+            with self.subTest(purge=purge):
+                config = {
+                    "walkforward": {"train_window_days": 4, "test_window_days": 2,
+                                    "step_days": 2, "purge_days": purge},
+                    "labels": {"horizons": [2]},
+                }
+                with self.assertRaisesRegex(ValueError, "training"):
+                    build_walkforward_windows(dates, config)
+
+    def test_scoring_rejects_short_purge_before_fitting(self) -> None:
+        index = pd.MultiIndex.from_product(
+            [pd.date_range("2024-01-01", periods=8), ["AAA"]], names=["date", "symbol"]
+        )
+        panel = pd.DataFrame({"in_universe": True, "blended_target": 1.0}, index=index)
+        config = {
+            "walkforward": {"train_window_days": 4, "test_window_days": 2,
+                            "step_days": 2, "purge_days": 1},
+            "labels": {"horizons": [1, 2]},
+        }
+        with patch("src.backtest.fit_predict_models") as fit:
+            with self.assertRaises(ValueError):
+                run_walkforward_scoring(panel, [], config)
+            fit.assert_not_called()
+
+    def test_sparse_cross_section_training_labels_end_before_every_test(self) -> None:
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-05",
+                                "2024-01-08", "2024-01-09", "2024-01-12", "2024-01-13",
+                                "2024-01-15", "2024-01-16", "2024-01-17", "2024-01-20"])
+        index = pd.MultiIndex.from_tuples(
+            [(date, "AAA") for date in dates]
+            + [(dates[i], "BBB") for i in (0, 1, 4, 6, 8, 10)], names=["date", "symbol"]
+        )
+        raw = pd.DataFrame({"close": 10.0, "in_universe": True, "feature_a": 1.0}, index=index)
+        config = {
+            "walkforward": {"train_window_days": 6, "test_window_days": 2,
+                            "step_days": 2, "purge_days": 2},
+            "labels": {"horizons": [1, 2], "future_top_k": 1,
+                       "target_mode": "blended_rank_pct", "blended_rank_weights": {1: 0.5, 2: 0.5}},
+        }
+        captured: list[pd.DataFrame] = []
+
+        def capture(train_df, score_df, feature_columns, config):
+            captured.append(train_df.copy())
+            return ModelPredictionResult(
+                predictions=pd.DataFrame(index=score_df.index), linear_backend="fake",
+                ml_backend="fake", train_rows=len(train_df), test_rows=len(score_df),
+            )
+
+        labelled = build_labels(raw, config)
+        with patch("src.backtest.fit_predict_models", capture):
+            _, summary = run_walkforward_scoring(labelled, ["feature_a"], config)
+
+        self.assertEqual(len(captured), 3)
+        self.assertTrue(all(not frame.empty for frame in captured))
+        for train, window in zip(captured, summary.to_dict("records")):
+            for date in train.index.get_level_values("date").unique():
+                for symbol in ("AAA", "BBB"):
+                    symbol_dates = labelled.xs(symbol, level="symbol").index
+                    if date not in symbol_dates:
+                        continue
+                    position = symbol_dates.get_loc(date)
+                    for horizon in config["labels"]["horizons"]:
+                        if position + horizon < len(symbol_dates):
+                            self.assertLess(symbol_dates[position + horizon], window["test_start"])
+        # BBB's label on Jan 2 reaches the first test on Jan 12. Its rank also
+        # contaminates AAA on Jan 2, although AAA's own labels end in training.
+        self.assertNotIn((dates[1], "AAA"), captured[0].index)
+        before = captured[0]
+        raw.loc[(raw.index.get_level_values("date") >= dates[6])
+                & (raw.index.get_level_values("symbol") == "BBB"), "close"] = 1000.0
+        changed = build_labels(raw, config)
+        self.assertNotEqual(labelled.loc[(dates[1], "AAA"), "blended_target"],
+                            changed.loc[(dates[1], "AAA"), "blended_target"])
+        captured.clear()
+        with patch("src.backtest.fit_predict_models", capture):
+            run_walkforward_scoring(changed, ["feature_a"], config)
+        pd.testing.assert_frame_equal(before, captured[0])
 
     def test_aggregate_walkforward_predictions_supports_latest_mode(self) -> None:
         index = pd.MultiIndex.from_tuples(

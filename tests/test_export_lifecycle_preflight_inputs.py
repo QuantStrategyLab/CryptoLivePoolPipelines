@@ -81,3 +81,44 @@ class ExportLifecyclePreflightInputsTests(unittest.TestCase):
             "BTC/ETH market history is stale",
         ):
             export_lifecycle_inputs(panel, Path(tmpdir))
+
+    def test_export_preserves_entire_date_with_missing_open_for_consumer_validation(self) -> None:
+        panel = self._valid_panel()
+        date = panel.index.get_level_values("date").unique()[500]
+        panel["open"] = panel["open"].astype(float)
+        panel.loc[(date, slice(None)), "open"] = float("nan")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = Path(tmpdir)
+            manifest = export_lifecycle_inputs(panel, output_dir)
+            exported = pd.read_csv(output_dir / "research_panel.csv.gz")
+
+        rows = exported.loc[exported["date"].eq(date.date().isoformat())]
+        self.assertEqual(set(rows["symbol"]), {"BTCUSDT", "ETHUSDT", "SOLUSDT"})
+        self.assertTrue(rows["open"].isna().all())
+        self.assertTrue(rows["final_score"].eq(0.75).all())
+        self.assertTrue(rows["in_universe"].all())
+        self.assertEqual(manifest["panel_rows"], len(exported))
+
+    def test_export_preserves_missing_open_for_unselected_or_cash_rows(self) -> None:
+        for cash_date in (False, True):
+            with self.subTest(cash_date=cash_date):
+                panel = self._valid_panel()
+                date = panel.index.get_level_values("date").unique()[500]
+                panel["open"] = panel["open"].astype(float)
+                selection = (date, slice(None)) if cash_date else (date, "BTCUSDT")
+                panel.loc[selection, "open"] = float("nan")
+                panel.loc[selection, "in_universe"] = False
+                panel.loc[selection, "final_score"] = float("nan")
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    output_dir = Path(tmpdir)
+                    export_lifecycle_inputs(panel, output_dir)
+                    exported = pd.read_csv(output_dir / "research_panel.csv.gz")
+
+                rows = exported.loc[exported["date"].eq(date.date().isoformat())]
+                self.assertEqual(len(rows), 3)
+                missing = rows if cash_date else rows.loc[rows["symbol"].eq("BTCUSDT")]
+                self.assertTrue(missing["open"].isna().all())
+                self.assertTrue(missing["final_score"].isna().all())
+                self.assertTrue(missing["in_universe"].eq(False).all())

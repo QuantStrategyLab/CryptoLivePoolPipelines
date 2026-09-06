@@ -33,10 +33,10 @@ def compute_performance_metrics(
     ann_vol = float(returns.std(ddof=0) * np.sqrt(periods_per_year))
     ann_return = float(returns.mean() * periods_per_year)
     downside = returns.where(returns < 0.0, 0.0)
-    downside_vol = float(downside.std(ddof=0) * np.sqrt(periods_per_year))
+    downside_vol = float(np.sqrt((downside ** 2).mean()) * np.sqrt(periods_per_year))
     sharpe = ann_return / ann_vol if ann_vol > 0.0 else np.nan
     sortino = ann_return / downside_vol if downside_vol > 0.0 else np.nan
-    drawdown = equity / equity.cummax() - 1.0
+    drawdown = equity / equity.cummax().clip(lower=1.0) - 1.0
     max_drawdown = float(drawdown.min())
     calmar = cagr / abs(max_drawdown) if max_drawdown < 0.0 else np.nan
     win_rate = float((returns > 0.0).mean())
