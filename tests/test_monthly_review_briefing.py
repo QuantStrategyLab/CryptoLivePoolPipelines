@@ -132,6 +132,27 @@ class MonthlyReviewBriefingTests(unittest.TestCase):
         self.assertAlmostEqual(payload["selection_boundary"]["score_gap_to_next"], 0.01)
         self.assertEqual(payload["warnings"], [])
 
+    def test_historical_universe_limitation_is_disclosed_without_changing_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.write_fixture_files(Path(tmp_dir))
+            payload = MODULE.build_review_payload(MODULE.build_review_inputs(output_dir))
+            outputs = MODULE.write_outputs(payload, output_dir)
+            review_md = outputs["review_markdown"].read_text(encoding="utf-8")
+
+        checklist = " ".join(payload["operator_checklist"])
+        for text in (
+            "cached exchangeInfo membership/TRADING status",
+            "market-cap screening, when enabled and available",
+            "static metadata rather than date-matched snapshots",
+            "not point-in-time (PIT)",
+            "Walk-forward/OOS time splits do not remove survivorship bias",
+            "disclosure does not fix that bias or change the current live pool's status",
+        ):
+            self.assertIn(text, checklist)
+            self.assertIn(text, review_md)
+        self.assertEqual(payload["warnings"], [])
+        self.assertEqual(payload["status"], "ok")
+
     def test_build_review_payload_warns_when_track_dates_do_not_align(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             output_dir = self.write_fixture_files(Path(tmp_dir), challenger_last_as_of_date="2026-02-13")

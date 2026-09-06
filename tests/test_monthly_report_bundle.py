@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import test_monthly_review_briefing as briefing_tests
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = PROJECT_ROOT / "scripts" / "run_monthly_report_bundle.py"
@@ -16,6 +18,26 @@ SPEC.loader.exec_module(MODULE)
 
 
 class MonthlyReportBundleTests(unittest.TestCase):
+    def test_generated_review_limitation_reaches_bundle_review_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            output_dir = self.write_fixture_files(root)
+            briefing_tests.MonthlyReviewBriefingTests().write_fixture_files(root)
+            briefing = briefing_tests.MODULE
+            payload = briefing.build_review_payload(briefing.build_review_inputs(output_dir))
+            briefing.write_outputs(payload, output_dir)
+
+            bundle_dir = output_dir / "monthly_report_bundle"
+            outputs = MODULE.write_bundle(output_dir, bundle_dir)
+            review_input = outputs["ai_review_input"].read_text(encoding="utf-8")
+            copied_review = json.loads((bundle_dir / "monthly_review.json").read_text(encoding="utf-8"))
+
+        self.assertIn("not point-in-time (PIT)", review_input)
+        self.assertIn("Walk-forward/OOS time splits do not remove survivorship bias", review_input)
+        self.assertEqual(copied_review["operator_checklist"], payload["operator_checklist"])
+        self.assertEqual(copied_review["warnings"], [])
+        self.assertEqual(copied_review["status"], "ok")
+
     def write_fixture_files(self, root: Path) -> Path:
         output_dir = root / "data" / "output"
         output_dir.mkdir(parents=True, exist_ok=True)

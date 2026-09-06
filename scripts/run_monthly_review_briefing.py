@@ -420,6 +420,11 @@ def build_review_payload(inputs: dict[str, Any]) -> dict[str, Any]:
         "shadow_analysis_available": shadow_available,
         "warnings": warnings,
         "operator_checklist": [
+            "Historical universe limitation: research and shadow results apply cached exchangeInfo membership/TRADING status "
+            "across historical dates; market-cap screening, when enabled and available, also uses static metadata rather "
+            "than date-matched snapshots. These universes are not point-in-time (PIT). "
+            "Walk-forward/OOS time splits do not remove survivorship bias; "
+            "disclosure does not fix that bias or change the current live pool's status.",
             "Run `make monthly-shadow-build` before generating the extended shadow review package.",
             "Confirm `live_pool.json` and `release_manifest.json` point to the same month; if generated, confirm `track_summary.csv` matches too.",
             "Review warning lines before any manual publish or communication follow-up.",
