@@ -207,31 +207,57 @@ def run_single_backtest(
 ) -> BacktestResult:
     """Run a long-only daily open-to-open backtest from cross-sectional scores."""
     strategy_cfg = config["strategy"]
+    if "in_universe" not in panel or not panel["in_universe"].map(
+        lambda value: isinstance(value, (bool, np.bool_))
+    ).all():
+        raise ValueError("Backtest requires complete boolean universe membership.")
+    if score_column not in panel:
+        raise ValueError("Backtest requires the requested score column.")
     dates = list(panel.index.get_level_values("date").unique().sort_values())
     rebalance_dates = make_schedule(dates, strategy_cfg["rebalance_frequency"])
     all_symbols = sorted(panel.loc[panel["in_universe"]].index.get_level_values("symbol").unique())
 
-    events: list[dict[str, Any]] = []
+    events: dict[pd.Timestamp, tuple[pd.Timestamp, pd.DataFrame]] = {}
+    skipped_warmup = False
+    scoring_start_date: pd.Timestamp | None = None
     for signal_date in rebalance_dates:
+        effective_date = next_trading_date(dates, signal_date, int(strategy_cfg["signal_lag_days"]))
+        if effective_date is None:
+            continue
         snapshot = panel.xs(signal_date, level="date")
+        eligible = snapshot.loc[snapshot["in_universe"]]
+        scores = eligible[score_column]
+        if not eligible.empty and scores.isna().all():
+            if (
+                scoring_start_date is None
+                and score_column in {"linear_score", "ml_score", "final_score"}
+                and "prediction_window_count" in eligible
+                and eligible["prediction_window_count"].eq(0).all()
+            ):
+                skipped_warmup = True
+                continue
+            raise ValueError("Backtest has incomplete eligible scores.")
+        if not np.isfinite(scores.dropna()).all():
+            raise ValueError("Backtest requires finite eligible scores.")
+        if scoring_start_date is None and (
+            scores.notna().any()
+            or ("prediction_window_count" in snapshot and snapshot["prediction_window_count"].gt(0).any())
+        ):
+            scoring_start_date = effective_date
         selected = select_portfolio(
             snapshot=snapshot,
             score_column=score_column,
             top_n=int(strategy_cfg["top_n"]),
             weighting=strategy_cfg["weighting"],
         )
-        if selected.empty:
-            continue
-        effective_date = next_trading_date(dates, signal_date, int(strategy_cfg["signal_lag_days"]))
-        if effective_date is None:
-            continue
-        selected = selected.copy()
-        selected["signal_date"] = signal_date
-        selected["effective_date"] = effective_date
-        selected["score_source"] = score_column
-        selected = selected.reset_index().rename(columns={"index": "symbol"})
-        events.extend(selected.to_dict("records"))
+        if not selected.empty:
+            weights = selected["target_weight"]
+            if not np.isfinite(weights).all() or weights.lt(0).any() or weights.sum() > 1.0 + 1e-12:
+                raise ValueError("Backtest requires finite long-only target weights without leverage.")
+        events[effective_date] = (signal_date, selected)
 
+    if skipped_warmup and scoring_start_date is None:
+        raise ValueError("Backtest is incomplete: no post-warmup executable decision.")
     if not events:
         empty_series = pd.Series(dtype=float)
         return BacktestResult(
@@ -244,42 +270,92 @@ def run_single_backtest(
             metrics=compute_performance_metrics(empty_series),
         )
 
-    events_df = pd.DataFrame(events).sort_values(["effective_date", "target_weight"], ascending=[True, False])
     trading_dates = pd.DatetimeIndex(dates)
+    if skipped_warmup:
+        # Exclude the entire pre-OOS prefix, including legal cash decisions,
+        # instead of counting unavailable model research periods as cash returns.
+        trading_dates = trading_dates[trading_dates >= scoring_start_date]
     open_matrix = wide_field_from_panel(panel, "open").reindex(index=trading_dates, columns=all_symbols)
-    open_to_open_returns = open_matrix.shift(-1).div(open_matrix).sub(1.0).fillna(0.0)
+    open_matrix = open_matrix.apply(pd.to_numeric, errors="coerce")
+    execution_cost = float(strategy_cfg["fee_bps"] + strategy_cfg["slippage_bps"]) / 10000.0
+    if not np.isfinite(execution_cost) or not 0 <= execution_cost < 1:
+        raise ValueError("Backtest execution cost must be finite, non-negative and below one.")
 
     weight_matrix = pd.DataFrame(0.0, index=trading_dates, columns=all_symbols)
     turnover_series = pd.Series(0.0, index=trading_dates, dtype=float)
+    net_returns = pd.Series(0.0, index=trading_dates, dtype=float)
     trade_rows = []
-    current_weights = pd.Series(0.0, index=weight_matrix.columns, dtype=float)
+    shares = pd.Series(0.0, index=weight_matrix.columns, dtype=float)
+    cash = 1.0
 
-    event_groups = {date: frame for date, frame in events_df.groupby("effective_date")}
-    for date in trading_dates:
-        if date in event_groups:
-            event_frame = event_groups[date].set_index("symbol")
+    for position, date in enumerate(trading_dates):
+        prices = open_matrix.loc[date]
+        held = shares.ne(0)
+        if not (np.isfinite(prices.loc[held]) & prices.loc[held].gt(0)).all():
+            raise ValueError("Backtest requires finite positive open prices for holdings and trades.")
+        asset_values = (shares * prices).where(held, 0.0)
+        pretrade_nav = float(cash + asset_values.sum())
+        if not np.isfinite(pretrade_nav) or pretrade_nav <= 0:
+            raise ValueError("Backtest requires finite positive portfolio equity.")
+        if date in events:
+            signal_date, event_frame = events[date]
             next_weights = build_weight_vector(event_frame, weight_matrix.columns)
-            turnover_value = calculate_turnover(current_weights, next_weights)
-            turnover_series.loc[date] = turnover_value
-            changed = (next_weights - current_weights).round(12)
-            for symbol, change in changed[changed != 0.0].items():
+            selected = next_weights.ne(0)
+            if not (np.isfinite(prices.loc[selected]) & prices.loc[selected].gt(0)).all():
+                raise ValueError("Backtest requires finite positive open prices for holdings and trades.")
+
+            # Solve postfee NAV + per-side trading costs = pretrade NAV.
+            # The long-only target and 0 <= cost < 1 give a unique scalar root.
+            target = next_weights.to_numpy()
+            before = asset_values.to_numpy()
+            lower, upper = 0.0, pretrade_nav
+            if execution_cost and np.abs(target * pretrade_nav - before).sum():
+                for _ in range(64):
+                    midpoint = (lower + upper) / 2
+                    required = midpoint + execution_cost * np.abs(target * midpoint - before).sum()
+                    if required > pretrade_nav:
+                        upper = midpoint
+                    else:
+                        lower = midpoint
+                postfee_nav = lower
+            else:
+                postfee_nav = pretrade_nav
+            target_values = next_weights * postfee_nav
+            trade_values = target_values - asset_values
+            fees = execution_cost * float(trade_values.abs().sum())
+            next_cash = float(cash - trade_values.sum() - fees)
+            cash_tolerance = np.finfo(float).eps * pretrade_nav * max(16, len(shares))
+            if not np.isfinite(next_cash) or next_cash < -cash_tolerance:
+                raise ValueError("Backtest rebalance cannot overdraw cash.")
+            cash = max(0.0, next_cash)  # Only floating-point-sized deficits reach here.
+            before_weights = asset_values / pretrade_nav
+            after_weights = target_values / pretrade_nav
+            turnover_series.loc[date] = calculate_turnover(before_weights, after_weights)
+            changed = trade_values / pretrade_nav
+            for symbol, change in changed[changed.round(12) != 0.0].items():
                 trade_rows.append(
                     {
                         "effective_date": date,
-                        "signal_date": event_frame.iloc[0]["signal_date"],
+                        "signal_date": signal_date,
                         "symbol": symbol,
-                        "weight_before": float(current_weights.loc[symbol]),
-                        "weight_after": float(next_weights.loc[symbol]),
+                        "weight_before": float(before_weights.loc[symbol]),
+                        "weight_after": float(after_weights.loc[symbol]),
                         "weight_change": float(change),
                         "score_source": score_column,
                     }
                 )
-            current_weights = next_weights
-        weight_matrix.loc[date] = current_weights
-
-    gross_returns = (weight_matrix * open_to_open_returns).sum(axis=1)
-    execution_cost = float(strategy_cfg["fee_bps"] + strategy_cfg["slippage_bps"]) / 10000.0
-    net_returns = gross_returns - turnover_series * execution_cost
+            shares = (target_values / prices).where(selected, 0.0)
+            asset_values = target_values
+        posttrade_nav = float(cash + asset_values.sum())
+        weight_matrix.loc[date] = asset_values / posttrade_nav
+        next_prices = open_matrix.iloc[position + 1] if position + 1 < len(trading_dates) else prices
+        held = shares.ne(0)
+        if not (np.isfinite(next_prices.loc[held]) & next_prices.loc[held].gt(0)).all():
+            raise ValueError("Backtest requires finite positive next open prices for held assets.")
+        next_nav = float(cash + (shares * next_prices).where(held, 0.0).sum())
+        if not np.isfinite(next_nav) or next_nav <= 0:
+            raise ValueError("Backtest requires finite positive portfolio equity.")
+        net_returns.loc[date] = next_nav / pretrade_nav - 1.0
     equity_curve = (1.0 + net_returns).cumprod()
     holdings = (
         weight_matrix.stack()
