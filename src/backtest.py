@@ -214,6 +214,8 @@ def run_single_backtest(
     if score_column not in panel:
         raise ValueError("Backtest requires the requested score column.")
     dates = list(panel.index.get_level_values("date").unique().sort_values())
+    if dates and not pd.DatetimeIndex(dates).equals(pd.date_range(dates[0], dates[-1], freq="D")):
+        raise ValueError("Backtest requires consecutive calendar days within the input window.")
     rebalance_dates = make_schedule(dates, strategy_cfg["rebalance_frequency"])
     all_symbols = sorted(panel.loc[panel["in_universe"]].index.get_level_values("symbol").unique())
 
