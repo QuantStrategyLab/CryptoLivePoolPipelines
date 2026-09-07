@@ -21,6 +21,29 @@ class BacktestAccountingTests(unittest.TestCase):
         index = pd.MultiIndex.from_product([self.dates, symbols], names=["date", "symbol"])
         return pd.DataFrame({"in_universe": True, "final_score": 1.0, "open": 100.0}, index=index)
 
+    def test_internal_calendar_gap_is_rejected(self) -> None:
+        self.dates = pd.date_range("2024-01-05", periods=6)
+        panel = self.panel()
+        panel["open"] = 100.0 * 1.01 ** np.arange(len(self.dates))
+        for missing_day in (self.dates[2], self.dates[4]):
+            with self.subTest(missing_day=missing_day):
+                incomplete = panel.drop(index=missing_day, level="date")
+                with self.assertRaisesRegex(ValueError, "consecutive calendar days"):
+                    run_single_backtest(incomplete, "final_score", self.config)
+
+    def test_contiguous_subwindow_does_not_require_external_dates(self) -> None:
+        panel = self.panel().loc[(self.dates[1:-1], slice(None)), :]
+        result = run_single_backtest(panel, "final_score", self.config)
+        self.assertEqual(result.returns.index.tolist(), self.dates[1:-1].tolist())
+
+    def test_unselected_symbol_gap_does_not_invalidate_complete_calendar(self) -> None:
+        panel = self.panel(("A", "B"))
+        panel.loc[(slice(None), "B"), "in_universe"] = False
+        panel = panel.drop(index=(self.dates[2], "B"))
+        result = run_single_backtest(panel, "final_score", self.config)
+        self.assertEqual(result.returns.index.tolist(), self.dates.tolist())
+        self.assertEqual(result.trades["symbol"].tolist(), ["A"])
+
     def test_cash_exit_and_reentry_follow_signal_lag_and_trade_log(self) -> None:
         panel = self.panel()
         panel.loc[(self.dates[1:3], "A"), "in_universe"] = False
