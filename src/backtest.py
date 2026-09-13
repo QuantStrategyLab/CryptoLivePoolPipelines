@@ -191,6 +191,9 @@ def run_walkforward_scoring(
         prediction_frame = pd.concat(all_predictions).sort_index()
         aggregated = aggregate_walkforward_predictions(prediction_frame, aggregation_mode=aggregation_mode)
         panel = panel.join(aggregated, how="left")
+        # Rows before the first OOS window have no joined prediction count;
+        # represent that warmup state explicitly without filling any scores.
+        panel["prediction_window_count"] = panel["prediction_window_count"].fillna(0).astype(int)
     else:
         panel["linear_score_raw"] = np.nan
         panel["ml_score_raw"] = np.nan

@@ -10,11 +10,13 @@ from src.backtest import (
     aggregate_walkforward_predictions,
     build_walkforward_windows,
     resolve_walkforward_purge_days,
+    run_backtest_suite,
     run_walkforward_scoring,
 )
 from src.evaluation import evaluate_live_pool_shadow, summarize_live_pool_shadow
 from src.labels import build_labels
 from src.models import ModelPredictionResult
+from src.ranking import build_final_scores
 
 
 class WalkforwardValidationTests(unittest.TestCase):
@@ -84,6 +86,65 @@ class WalkforwardValidationTests(unittest.TestCase):
         self.assertEqual(int(window_summary.iloc[0]["train_rows_pre_purge"]), 8)
         self.assertEqual(int(window_summary.iloc[0]["purged_train_rows"]), 4)
         self.assertEqual(int(scored["prediction_window_count"].max()), 1)
+
+    def test_walkforward_prefix_rows_are_warmup_before_backtest(self) -> None:
+        dates = pd.date_range("2024-01-01", periods=8, freq="D")
+        index = pd.MultiIndex.from_product([dates, ["AAA", "BBB"]], names=["date", "symbol"])
+        panel = pd.DataFrame(
+            {
+                "in_universe": True,
+                "blended_target": 1.0,
+                "feature_a": 1.0,
+                "rule_score": 0.5,
+                "regime": "late_momentum",
+                "open": 100.0,
+            },
+            index=index,
+        )
+        config = {
+            "walkforward": {
+                "train_window_days": 4,
+                "test_window_days": 2,
+                "step_days": 2,
+                "purge_days": 1,
+                "prediction_aggregation": "mean",
+            },
+            "labels": {"horizons": [1]},
+            "model": {"min_train_rows": 1},
+            "ensemble": {"default_weights": {"rule_score": 0.35, "linear_score": 0.20, "ml_score": 0.45}},
+            "regime_weights": {},
+            "ranking": {"selected_pool_size": 2},
+            "strategy": {
+                "rebalance_frequency": "daily",
+                "top_n": 2,
+                "weighting": "equal",
+                "signal_lag_days": 1,
+                "fee_bps": 0,
+                "slippage_bps": 0,
+            },
+        }
+
+        def fake_fit_predict_models(train_df, score_df, feature_columns, config):
+            predictions = pd.DataFrame(index=score_df.index)
+            predictions["linear_score_raw"] = 1.0
+            predictions["ml_score_raw"] = 1.0
+            return ModelPredictionResult(
+                predictions=predictions,
+                linear_backend="fake_linear",
+                ml_backend="fake_ml",
+                train_rows=len(train_df),
+                test_rows=len(score_df),
+            )
+
+        with patch("src.backtest.fit_predict_models", fake_fit_predict_models):
+            scored, _ = run_walkforward_scoring(panel, ["feature_a"], config)
+        scored = build_final_scores(scored, config)
+
+        prefix = (dates[:4], slice(None))
+        self.assertTrue(scored.loc[prefix, "final_score"].isna().all())
+        self.assertTrue(scored.loc[prefix, "prediction_window_count"].eq(0).all())
+        results = run_backtest_suite(scored, config)
+        self.assertIn("linear_score", results)
 
     def test_purge_rejects_short_or_invalid_override_without_coercing_it(self) -> None:
         for purge in (0, 1, -1, 2.5, True, False, "bad", "2.5", float("nan"), float("inf"), [], {}):
