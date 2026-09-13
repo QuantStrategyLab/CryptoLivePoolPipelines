@@ -109,6 +109,18 @@ class BacktestAccountingTests(unittest.TestCase):
         self.assertEqual(len(result.returns), len(self.dates))
         self.assertTrue(result.returns.eq(0).all())
 
+    def test_inverse_vol_skips_top_score_with_missing_volatility(self) -> None:
+        panel = self.panel(("A", "B"))
+        panel["vol20"] = 0.2
+        panel.loc[(slice(None), "A"), "final_score"] = 2.0
+        panel.loc[(slice(None), "A"), "vol20"] = np.nan
+        panel.loc[(slice(None), "B"), "final_score"] = 1.0
+        config = {"strategy": {**self.config["strategy"], "weighting": "inverse_vol"}}
+
+        result = run_single_backtest(panel, "final_score", config)
+
+        self.assertEqual(result.trades["symbol"].tolist(), ["B"])
+
     def test_nonfinite_eligible_scores_are_not_cash(self) -> None:
         for bad_score in (np.inf, -np.inf):
             with self.subTest(bad_score=bad_score):
