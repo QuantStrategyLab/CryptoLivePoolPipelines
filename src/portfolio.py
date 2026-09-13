@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
+import numpy as np
 import pandas as pd
 
 
@@ -16,11 +17,16 @@ def select_portfolio(
     if eligible.empty:
         return eligible
 
+    weighting = weighting.lower()
+    if weighting in {"inverse_vol", "inverse-vol", "inv_vol"} and "vol20" in eligible.columns:
+        # Missing risk estimates cannot produce a trusted inverse-vol weight.
+        # Exclude those candidates before top-N selection so one bad row does
+        # not turn every selected target weight into NaN.
+        eligible = eligible.loc[np.isfinite(eligible["vol20"])]
     selected = eligible.sort_values(score_column, ascending=False).head(top_n).copy()
     if selected.empty:
         return selected
 
-    weighting = weighting.lower()
     if weighting in {"inverse_vol", "inverse-vol", "inv_vol"} and "vol20" in selected.columns:
         inverse_vol = 1.0 / selected["vol20"].clip(lower=0.05)
         selected["target_weight"] = inverse_vol / inverse_vol.sum()
@@ -43,4 +49,3 @@ def calculate_turnover(previous_weights: pd.Series, next_weights: pd.Series) -> 
     previous_weights = previous_weights.reindex(next_weights.index).fillna(0.0)
     next_weights = next_weights.reindex(previous_weights.index).fillna(0.0)
     return float(0.5 * (next_weights - previous_weights).abs().sum())
-
