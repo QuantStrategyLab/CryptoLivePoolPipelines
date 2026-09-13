@@ -28,7 +28,9 @@ def select_portfolio(
         return selected
 
     if weighting in {"inverse_vol", "inverse-vol", "inv_vol"} and "vol20" in selected.columns:
-        inverse_vol = 1.0 / selected["vol20"].clip(lower=0.05)
+        # Compute normalized weights in float64 so downcast research inputs
+        # cannot make a fully invested portfolio round above the strict guard.
+        inverse_vol = 1.0 / selected["vol20"].astype(np.float64).clip(lower=0.05)
         selected["target_weight"] = inverse_vol / inverse_vol.sum()
     else:
         selected["target_weight"] = 1.0 / len(selected)
