@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 
 from src.backtest import run_single_backtest
+from src.portfolio import select_portfolio
+from src.utils import clean_numeric_frame
 
 
 class BacktestAccountingTests(unittest.TestCase):
@@ -120,6 +122,19 @@ class BacktestAccountingTests(unittest.TestCase):
         result = run_single_backtest(panel, "final_score", config)
 
         self.assertEqual(result.trades["symbol"].tolist(), ["B"])
+
+    def test_inverse_vol_float32_weights_remain_fully_invested(self) -> None:
+        panel = self.panel(("A", "B"))
+        panel["final_score"] = np.tile([2.0, 1.0], len(self.dates))
+        panel["vol20"] = np.tile([0.13621539, 0.6013158], len(self.dates))
+        panel = clean_numeric_frame(panel)
+        config = {"strategy": {**self.config["strategy"], "top_n": 2, "weighting": "inverse_vol"}}
+
+        selected = select_portfolio(panel.xs(self.dates[0], level="date"), "final_score", 2, "inverse_vol")
+        self.assertEqual(selected["target_weight"].dtype, np.dtype("float64"))
+        self.assertLessEqual(float(selected["target_weight"].sum()), 1.0 + 1e-12)
+        result = run_single_backtest(panel, "final_score", config)
+        self.assertFalse(result.returns.empty)
 
     def test_nonfinite_eligible_scores_are_not_cash(self) -> None:
         for bad_score in (np.inf, -np.inf):
