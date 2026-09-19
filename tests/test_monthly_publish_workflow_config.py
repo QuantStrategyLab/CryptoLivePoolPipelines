@@ -11,7 +11,7 @@ LIFECYCLE_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "publish-life
 README_ZH_PATH = PROJECT_ROOT / "README.zh-CN.md"
 QPK_DEPENDENCY = (
     "quant-platform-kit @ "
-    "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@7f140f07ac89f0b4b88347a903906825dde11c39"
+    "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@1a6ed98eea5d69ebe6d09ec1cb1e6ec10c4faeed"
 )
 PINNED_ACTIONS = (
     "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
