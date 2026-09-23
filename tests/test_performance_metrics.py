@@ -87,6 +87,46 @@ class PerformanceMetricsTests(unittest.TestCase):
             self.assertAlmostEqual(persisted.calmar_ratio, result.calmar_ratio)
             self.assertAlmostEqual(persisted.max_drawdown, result.max_drawdown)
 
+    def test_internal_missing_returns_are_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            compute_performance_metrics(pd.Series([0.1, np.nan, -0.1]))
+
+    def test_non_finite_returns_are_rejected(self) -> None:
+        for value in (np.inf, -np.inf):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    compute_performance_metrics(pd.Series([0.01, value, 0.02]))
+
+    def test_duplicate_dates_are_rejected(self) -> None:
+        index = pd.to_datetime(["2024-01-01", "2024-01-01"])
+        with self.assertRaisesRegex(ValueError, "duplicate dates"):
+            compute_performance_metrics(pd.Series([0.01, -0.02], index=index))
+
+    def test_returns_at_or_below_minus_100_percent_are_rejected(self) -> None:
+        for returns in ([-1.2, -1.2], [-1.0, 0.1], [-1.0]):
+            with self.subTest(returns=returns):
+                with self.assertRaises(ValueError):
+                    compute_performance_metrics(pd.Series(returns))
+
+    def test_leading_warmup_nans_match_the_observed_window(self) -> None:
+        observed = pd.Series([0.01, -0.02, 0.03])
+        warmed = pd.Series([np.nan, np.nan, 0.01, -0.02, 0.03])
+        warmed_metrics = compute_performance_metrics(warmed)
+        observed_metrics = compute_performance_metrics(observed)
+        for key, value in observed_metrics.items():
+            with self.subTest(metric=key):
+                if np.isnan(value):
+                    self.assertTrue(np.isnan(warmed_metrics[key]))
+                else:
+                    self.assertAlmostEqual(warmed_metrics[key], value)
+
+    def test_ordinary_compound_returns_keep_defined_365_day_cagr(self) -> None:
+        returns = pd.Series([0.01, -0.02, 0.03])
+        metrics = compute_performance_metrics(returns)
+        equity = float(np.prod(1.0 + returns.to_numpy()))
+        self.assertAlmostEqual(metrics["CAGR"], equity ** (365 / len(returns)) - 1.0)
+        self.assertTrue(np.isfinite(metrics["Sharpe"]))
+
 
 if __name__ == "__main__":
     unittest.main()
