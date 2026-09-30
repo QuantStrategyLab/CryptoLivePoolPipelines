@@ -53,6 +53,18 @@ def _synthetic_panel(*, days: int = 1500, symbols: tuple[str, ...] = ("BTCUSDT",
     return panel.sort_index()
 
 
+def _execution_config(params: Mapping[str, Any]) -> dict[str, Any]:
+    supported = DEFAULT_BACKTEST_CONFIG["strategy"]
+    unsupported = sorted(str(key) for key in params if key not in supported)
+    if unsupported:
+        raise ValueError(
+            f"Unsupported execution params {unsupported}; supported={sorted(supported)}"
+        )
+    strategy = dict(supported)
+    strategy.update(params)
+    return {"strategy": strategy}
+
+
 def _slice_panel(panel: pd.DataFrame, *, start_date: date | None, end_date: date | None) -> pd.DataFrame:
     frame = panel
     level_dates = frame.index.get_level_values("date")
@@ -126,17 +138,25 @@ class CryptoLivePoolBacktestRunner:
             raise ValueError("No panel rows for requested window")
 
         started = datetime.now(timezone.utc)
-        result = run_single_backtest(sliced, "final_score", DEFAULT_BACKTEST_CONFIG)
+        result = run_single_backtest(sliced, "final_score", _execution_config(params))
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-        eval_dates = sliced.index.get_level_values("date")
+        observed = result.returns.dropna()
+        if observed.empty:
+            raise ValueError("Insufficient return observations for the requested window")
         metrics = dict(result.metrics)
-        metrics["days"] = int(len(result.returns.dropna()))
+        metrics["days"] = int(len(observed))
+        if isinstance(observed.index, pd.DatetimeIndex):
+            bound_start = pd.Timestamp(observed.index.min()).date()
+            bound_end = pd.Timestamp(observed.index.max()).date()
+        else:
+            bound_start = start_date
+            bound_end = end_date
         return _metrics_to_qpk_result(
             strategy_profile=strategy_profile,
             params=params,
-            metrics=result.metrics,
-            start_date=start_date or eval_dates.min().date(),
-            end_date=end_date or eval_dates.max().date(),
+            metrics=metrics,
+            start_date=bound_start,
+            end_date=bound_end,
             run_duration_seconds=elapsed,
         )
 

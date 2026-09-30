@@ -8,13 +8,39 @@ import pandas as pd
 from .utils import make_schedule
 
 
+def _observed_returns(returns: pd.Series) -> pd.Series:
+    """Keep a leading warmup gap, and reject returns that cannot compound."""
+    if returns.empty:
+        return returns
+    if isinstance(returns.index, pd.DatetimeIndex):
+        dates = returns.index.tz_convert("UTC").tz_localize(None) if returns.index.tz is not None else returns.index
+        if dates.normalize().has_duplicates:
+            raise ValueError("Performance metrics reject duplicate dates.")
+    numeric = pd.to_numeric(returns, errors="coerce")
+    values = numeric.to_numpy(dtype=float)
+    first_valid = 0
+    while first_valid < len(values) and np.isnan(values[first_valid]):
+        first_valid += 1
+    observed = values[first_valid:]
+    if observed.size == 0:
+        return numeric.iloc[0:0]
+    if not np.isfinite(observed).all():
+        raise ValueError("Performance metrics reject non-finite or internal missing returns.")
+    if np.any(observed <= -1.0):
+        raise ValueError("Performance metrics reject returns at or below -100%.")
+    return numeric.iloc[first_valid:]
+
+
 def compute_performance_metrics(
     returns: pd.Series,
     turnover: Optional[pd.Series] = None,
     periods_per_year: int = 365,
 ) -> dict[str, float]:
     """Compute daily strategy performance metrics from a return series."""
-    returns = returns.dropna()
+    original_count = len(returns)
+    returns = _observed_returns(returns)
+    if turnover is not None and len(returns) != original_count and len(turnover) == original_count:
+        turnover = turnover.iloc[-len(returns) :]
     if returns.empty:
         return {
             "CAGR": np.nan,
