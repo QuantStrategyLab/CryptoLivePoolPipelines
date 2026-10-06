@@ -1,13 +1,6 @@
 # CryptoLivePoolPipelines
 
-
-## QSL 架构角色
-
-- **层级**：`快照/证据流水线`。
-- **职责**：加密 live-pool 与发布流水线。
-- **事实源/归属**：月度 live-pool 成员、排序、验证 artifacts。
-- **消费对象**：市场数据输入、QuantPlatformKit helpers。
-- **禁止事项**：下单或绕过下游 artifact contract 检查。
+CryptoLivePoolPipelines 负责挑选并发布 QuantStrategyLab 加密策略所用的月度 live-pool。它对候选币种排序，决定哪些币种留在已发布的池子里、顺序如何排列，并产出下游策略代码在下单前要读取的验证产物。它本身不下单，是其它仓库依赖的上游证据与发布流水线。
 
 [English README](README.md)
 
@@ -38,6 +31,14 @@ CryptoStrategies 和 BinancePlatform 应只消费通过 contract 检查的发布
 ## 这些产物用来做什么
 
 Live-pool artifact 的作用是让策略判断可复现：包括 ranking 输入、live-pool snapshot、manifest、validation summary 和提升证据。`live_pool.json` 和 `artifact_manifest.json` 是稳定的下游执行合约；ranking 文件和研究输出默认留在上游作为证据，除非合约明确提升它们。它们不是宣传式收益承诺。下游仓库提升 profile 前，应在适用场景下检查最新短、中、长周期产物。
+
+## QSL 架构角色
+
+- **层级**：`快照/证据流水线`。
+- **职责**：加密 live-pool 与发布流水线。
+- **事实源/归属**：月度 live-pool 成员、排序、验证 artifacts。
+- **消费对象**：市场数据输入、QuantPlatformKit helpers。
+- **禁止事项**：下单或绕过下游 artifact contract 检查。
 
 ## 月度 review 自动化
 
