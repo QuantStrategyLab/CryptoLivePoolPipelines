@@ -1,13 +1,6 @@
 # CryptoLivePoolPipelines
 
-
-## QSL architecture role
-
-- **Layer**: `pipeline`.
-- **Responsibility**: crypto live-pool and release pipeline.
-- **Owns**: monthly live-pool membership, ordering, validation artifacts.
-- **Consumes**: market data inputs, QuantPlatformKit helpers.
-- **Must not**: place trades or bypass downstream artifact contract checks.
+CryptoLivePoolPipelines selects and publishes the monthly crypto live-pool used by QuantStrategyLab's crypto strategies. It ranks candidate symbols, decides which ones stay in the published pool and in what order, and produces the validation artifacts that downstream strategy code reads before trading on them. It does not place trades itself; it is the upstream evidence and release pipeline that other repositories depend on.
 
 [Chinese README](README.zh-CN.md)
 
@@ -38,6 +31,14 @@ CryptoStrategies and BinancePlatform should consume only release artifacts that 
 ## What the artifacts are for
 
 Live-pool artifacts are used to make strategy decisions reproducible: ranking inputs, live-pool snapshots, manifests, validation summaries, and promotion evidence. `live_pool.json` and `artifact_manifest.json` are the stable downstream execution contract; ranking files and research outputs stay upstream evidence unless the contract explicitly promotes them. They are not marketing claims. Before a downstream repository promotes a profile, review the latest artifacts across short, medium, and long windows where applicable.
+
+## QSL architecture role
+
+- **Layer**: `pipeline`.
+- **Responsibility**: crypto live-pool and release pipeline.
+- **Owns**: monthly live-pool membership, ordering, validation artifacts.
+- **Consumes**: market data inputs, QuantPlatformKit helpers.
+- **Must not**: place trades or bypass downstream artifact contract checks.
 
 ## Repository layout
 
