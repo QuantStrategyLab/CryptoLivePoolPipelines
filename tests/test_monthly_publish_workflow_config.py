@@ -85,11 +85,11 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         preflight = jobs["monthly-review-preflight"]
         review = jobs["monthly-dual-api-review"]
         self.assertEqual(preflight["permissions"], {"contents": "read", "issues": "write"})
-        self.assertEqual(review["permissions"], {"contents": "read", "actions": "read", "issues": "write"})
+        self.assertEqual(review["permissions"], {"contents": "read", "actions": "read", "issues": "write", "id-token": "write"})
         self.assertIn("github.ref_name == 'main'", preflight["if"])
         self.assertEqual(review["if"], "needs.monthly-review-preflight.outputs.ready == 'true'")
         self.assertEqual(review["concurrency"], {"group": "monthly-dual-api-review-budget", "cancel-in-progress": False})
-        self.assertEqual(review["timeout-minutes"], 5)
+        self.assertEqual(review["timeout-minutes"], 20)
         for job in (preflight, review):
             self.assertEqual(job["runs-on"], "ubuntu-latest")
             checkout = job["steps"][0]
@@ -97,7 +97,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
             text = str(job)
             for forbidden in ("google-github-actions", "git push", "codex exec", "cursor", "review_and_fix"):
                 self.assertNotIn(forbidden, text)
-            self.assertNotIn("id-token", text)
+        self.assertNotIn("id-token", str(preflight))
 
     def test_privileged_workflows_pin_remote_actions_to_full_commit_shas(self) -> None:
         uses_pattern = re.compile(r"^\s*uses:\s*([^\s#]+)(?:\s+#\s*([^\s#]+))?\s*$", re.MULTILINE)

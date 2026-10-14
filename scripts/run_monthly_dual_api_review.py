@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single-turn API reviews of published materials; remote writes are issue comments only."""
+"""Single-turn API reviews; safe issue disposition and existing-grant Dot escalation."""
 from __future__ import annotations
 
 import argparse
@@ -7,12 +7,17 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_CEILING
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
 import signal
+import sys
 import urllib.parse
 import urllib.request
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.monthly_review_loop import IssueState, apply_monthly_loop
 
 
 REPOSITORY = "QuantStrategyLab/CryptoLivePoolPipelines"
@@ -25,7 +30,10 @@ SYSTEM = (
     "bias, and research questions. Cite material headings and distinguish upstream "
     "selector metrics from downstream strategy performance. Do not invent results, "
     "write code, propose automatic execution, or authorize trading or promotion. "
-    "Return a concise English review for a human, with findings and limitations."
+    'Return exactly JSON with verdict ("approve" or "flag"), severity ("none", '
+    '"data_integrity", "risk_limit", or "missing_stale_inputs"), and summary '
+    '(a nonempty English string, at most 6000 characters, with evidence headings and limitations). '
+    'Use severity "none" for an approval or a non-severe concern. Never hide a concern as an approval.'
 )
 # Text-only byte-level tokenizers cannot produce more text tokens than UTF-8 bytes.
 # Include a deliberately generous allowance for the fixed two-message framing.
@@ -81,11 +89,11 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def request_json(url, headers, *, payload=None, timeout=30):
+def request_json(url, headers, *, payload=None, timeout=30, method=None):
     request = urllib.request.Request(
         url, data=None if payload is None else json.dumps(payload).encode("utf-8"),
         headers={**headers, "Content-Type": "application/json"},
-        method="GET" if payload is None else "POST",
+        method=method or ("GET" if payload is None else "POST"),
     )
     # No SDK, automatic retry, redirect, streaming, tool call, or continuation.
     with deadline(timeout):
@@ -105,6 +113,7 @@ class IssueComments:
             raise ReviewUnavailable("existing review issue or GitHub token unavailable")
         self.base = f"https://api.github.com/repos/{REPOSITORY}"
         self.issue = issue
+        self.request_json = request_json
         self.headers = {"Authorization": f"Bearer {env['GITHUB_TOKEN']}",
                         "Accept": "application/vnd.github+json",
                         "X-GitHub-Api-Version": "2022-11-28"}
@@ -133,6 +142,34 @@ class IssueComments:
             if len(data) < 100:
                 return comments
         raise ReviewUnavailable("monthly budget history incomplete")
+
+    def own_comments(self):
+        comments = []
+        for page in range(1, 101):
+            data = request_json(f"{self.base}/issues/{self.issue}/comments?per_page=100&page={page}", self.headers)
+            if not isinstance(data, list):
+                raise ReviewUnavailable("review state unavailable")
+            comments.extend(item for item in data if item.get("user", {}).get("login") == "github-actions[bot]")
+            if len(data) < 100:
+                return comments
+        raise ReviewUnavailable("review state history incomplete")
+
+    def auto_close(self):
+        # This object was bound to an existing monthly-review issue, never a PR.
+        target = f"{self.base}/issues/{self.issue}"
+        issue = request_json(target, self.headers)
+        labels = {label["name"] for label in issue.get("labels", [])}
+        if "auto-verified" not in labels:
+            try:
+                request_json(f"{self.base}/labels/auto-verified", self.headers)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise
+                request_json(f"{self.base}/labels", self.headers,
+                             payload={"name": "auto-verified", "color": "0E8A16"})
+            request_json(target + "/labels", self.headers, payload={"labels": ["auto-verified"]})
+        if issue.get("state") != "closed":
+            request_json(target, self.headers, payload={"state": "closed", "state_reason": "completed"}, method="PATCH")
 
 
 def reserve_budget(issue, config, report_month, now):
@@ -232,12 +269,19 @@ class APIReviewer:
 
 def unavailable(issue, reason):
     issue.post(f"## Monthly API review unavailable\n\nreview unavailable: {reason}. "
-               "No automated fixes or trading decisions were made; human review is required.")
+               "No automated fixes or trading decisions were made. The independent dead-man monitor tracks this failure.")
 
 
 def run_review(bundle_dir, config, issue, clients, now=None):
     try:
         report_month, materials, bound = load_materials(bundle_dir, config)
+        identity = "monthly:" + hashlib.sha256((report_month + "\n" + materials).encode()).hexdigest()
+        archive = Path("data/output/monthly_review_verdict.json")
+        previous = IssueState(issue, archive=archive).load(identity)
+        if previous and previous.get("reviews"):
+            state = apply_monthly_loop(issue, list(previous["reviews"].items()), identity=identity,
+                                       materials=materials, archive=archive)
+            return state.get("finished") is True
         reserve_budget(issue, config, report_month, now or datetime.now(timezone.utc))
     except ReviewUnavailable as exc:
         unavailable(issue, str(exc))
@@ -257,11 +301,20 @@ def run_review(bundle_dir, config, issue, clients, now=None):
             f"Review only. Input upper bound: {bound}/{config.max_input} tokens per call; "
             f"output cap: {config.max_output}; timeout: {config.timeout}s; retries: 0.\n\n")
     for provider, text in results:
-        body += f"### {provider} ({MODELS[provider]})\n\n{text}\n\n"
+        # Model text cannot mention the owner or trigger arbitrary GitHub mentions.
+        safe_text = text.replace("@", "@\u200b")
+        body += f"### {provider} ({MODELS[provider]})\n\n{safe_text}\n\n"
     if failures:
-        body += "review unavailable: " + ", ".join(failures) + ". Human review is required.\n"
+        body += "review unavailable: " + ", ".join(failures) + ". The independent dead-man monitor tracks this failure.\n"
     issue.post(body)
-    return not failures
+    if failures:
+        return False
+    try:
+        state = apply_monthly_loop(issue, results, identity=identity, materials=materials, archive=archive)
+        return state.get("finished") is True
+    except Exception:
+        unavailable(issue, "structured review or closed-loop state unavailable")
+        return False
 
 
 def main():

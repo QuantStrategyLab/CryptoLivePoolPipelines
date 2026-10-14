@@ -114,7 +114,7 @@ count would be smaller; it never silently truncates evidence or makes a separate
 token-count API call. Output limits are sent as OpenAI `max_completion_tokens`
 (including reasoning) and Anthropic `max_tokens`. Reported usage is also checked;
 missing usage, over-cap usage, or a truncated answer is unavailable. A wall-clock
-deadline covers each HTTP request and response read. The review job has a five-minute
+deadline covers each HTTP request and response read. The review job has a twenty-minute
 overall deadline. Retries are fixed at zero to preserve the exactly-two-request limit.
 
 Models and standard-service rates are fixed in the review script:
@@ -135,11 +135,13 @@ reservation for the same report month. Reservations are never refunded, even aft
 timeout, cancellation, or partial failure; a failed reservation write makes no API
 requests. Do not delete or edit reservation comments, since they preserve the budget
 and rerun record. A rerun of an already reserved report is skipped rather than charged
-again. Human review remains available through the published artifact and issue body.
+again. If a durable loop verdict already exists, reruns resume only that loop and
+read the original Dot task; they never charge the API pair again.
 
-The review job has only `contents: read`, `actions: read`, and `issues: write`, with
-checkout credentials disabled. It has no cloud identity or repository-write grant.
-Its remote writes are reservation and review comments on the existing issue only.
+The review job has `contents: read`, `actions: read`, `issues: write`, and
+`id-token: write`, with checkout credentials disabled. OIDC is solely for the
+current workload's already approved AIGateway project; it does not add an IAM or
+service grant. Remote writes are review state/comments, labels, and issue closure.
 The original publisher still owns publication and heartbeat operations. This audit
 does not dispatch AIAuditBridge, fix code, create PRs, mutate releases, change live
 configuration, or authorize promotion/trading. CryptoStrategies consumes the upstream
@@ -311,3 +313,42 @@ Rollback note:
 - Confirm Firestore `strategy/CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL` contains the expected `version`, `mode`, `symbols`, and `source_project`.
 - Confirm GCS current pointers and versioned objects exist for the same version.
 - Confirm downstream consumers are reading the new version without falling back to degraded sources.
+
+### Unattended review disposition
+
+Each API must return strict JSON with `verdict` (`approve` or `flag`), `severity`
+(`none`, `data_integrity`, `risk_limit`, `missing_stale_inputs`), and an evidence-based
+English `summary`. Malformed, missing, partial, or truncated responses never pass.
+Model-generated mentions are neutralized. Two approvals archive the verdict JSON,
+apply `auto-verified`, and close the existing monthly-review issue. This closes the
+review record; it does not approve a release or override deterministic gates.
+
+Any flag submits at most one deeper Dot task with the frozen materials, via the
+current workflow's existing AIGateway grant. Existing `AI_SERVICE_URL`,
+`AI_SERVICE_AUDIENCE`, `AI_SERVICE_PROFILE`, and `AI_SERVICE_MODEL` variables select
+that route. No cross-repository credential or grant is borrowed. Submission intent
+is saved in bot-authored issue comments before POST; reruns only GET the original
+task. An ambiguous POST without a task ID stays blocked. Dot's strict confirmation
+is posted back; only confirmation of a real problem mentions the owner. Dismissal
+archives the verdict and closes the review issue. API budget caps remain unchanged;
+Dot uses only existing subscription task admission and limits, with no paid fallback.
+
+Severe consensus requires both reviewers to flag the same severe category. Only
+an existing actuator bound to this cycle may pause rebalancing, holding positions
+and creating no orders. **This pipeline has no such bound actuator**: the loop
+reports the gap and notifies the owner, without building or changing trading logic.
+No finding or AI response can edit code, configuration, settings, orders or servers.
+
+`Monthly Review Dead-man` runs independently after Monthly Publish and daily. It
+counts failed, skipped, cancelled, timed-out and missing review jobs, and missing
+natural monthly cycles after November 2026. `REVIEW_DEADMAN_THRESHOLD` defaults to
+`3` (range 1–24); success resets the streak. Alerts are bot-authored, deduplicated
+GitHub issues mentioning `REVIEW_OWNER_LOGIN` (default `Pigbibi`). A monitor API
+failure fails the monitor visibly rather than claiming health. Verdict artifacts
+are retained for 90 days; durable issue records are retained without expiry.
+
+Current operational gaps: both API secret names must already be available to this
+repository; the deployed grant template does not establish monthly-publisher Dot
+admission. Without a route/grant, flags remain `escalation_unavailable` and count
+toward the dead-man threshold. This change creates neither secrets nor grants and
+does not run production publication or a live model acceptance test.

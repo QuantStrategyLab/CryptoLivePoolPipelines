@@ -27,6 +27,12 @@ class FakeIssue:
         self.comments = []
         self.ledger = list(history)
 
+    def own_comments(self):
+        return self.ledger
+
+    def auto_close(self):
+        self.closed = True
+
     def history(self, month):
         return self.ledger
 
@@ -53,7 +59,7 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
         (self.bundle / "strategy_metrics.json").write_text('{"snapshots": []}')
         self.config = MODULE.Config({})
         self.issue = FakeIssue()
-        self.clients = {name: Mock(review=Mock(return_value="Review finding"))
+        self.clients = {name: Mock(review=Mock(return_value=json.dumps({"verdict": "approve", "severity": "none", "summary": "Review finding"})))
                         for name in ("OpenAI", "Anthropic")}
 
     def run_review(self):
@@ -61,9 +67,9 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
 
     def test_exactly_two_single_turn_requests_with_caps_and_no_tools(self):
         responses = [
-            {"choices": [{"message": {"content": "OpenAI finding"}, "finish_reason": "stop"}],
+            {"choices": [{"message": {"content": json.dumps({"verdict": "approve", "severity": "none", "summary": "OpenAI finding"})}, "finish_reason": "stop"}],
              "usage": {"prompt_tokens": 100, "completion_tokens": 50}},
-            {"content": [{"type": "text", "text": "Anthropic finding"}], "stop_reason": "end_turn",
+            {"content": [{"type": "text", "text": json.dumps({"verdict": "approve", "severity": "none", "summary": "Anthropic finding"})}], "stop_reason": "end_turn",
              "usage": {"input_tokens": 100, "output_tokens": 50}},
         ]
         self.clients = {provider: MODULE.APIReviewer(provider, "fake-key") for provider in MODULE.MODELS}
