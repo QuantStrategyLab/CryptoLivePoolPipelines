@@ -80,11 +80,19 @@ Boundary rules:
 - Research reports and shadow-track diagnostics stay upstream and are not part of the minimum downstream execution contract.
 - Telegram messages from this repository are operational release notifications, not trade execution alerts.
 
-## Monthly Codex Remediation
+## Monthly review materials and issue
 
-The monthly publish workflow creates a `monthly-review` issue, then dispatches `AIAuditBridge` as the automated review and remediation path. The bridge owns provider selection through `CODEX_AUDIT_PROVIDER`: `auto` is the default and calls the service-backed Codex path first, falls back to the configured API reviewers when Codex service execution fails, and fails loudly when no API fallback key is configured. `codex` disables API fallback; `api` posts a combined API review; `openai` and `anthropic` post a single-provider API review only. Set `CODEX_AUDIT_BRIDGE_REF` to pin the bridge workflow ref; the default is `main`.
+The monthly publish workflow generates the report bundle and creates a
+`monthly-review` issue containing the review materials. It does not dispatch
+AIAuditBridge, call an AI provider, run an automatic dual-AI audit, or apply AI
+fixes. The former bridge review/remediation orchestration has been retired.
+The old `CODEX_AUDIT_*` provider and bridge settings do not enable that retired
+path and are not evidence of a completed audit.
 
-If the bridge dispatch fails, the monthly publish workflow fails loudly. Source-local legacy AI review workflows are intentionally removed; provider fallback lives in `AIAuditBridge`.
+A successful report workflow confirms material generation and issue creation,
+not AI review completion. A human must arrange any further review and record
+its evidence explicitly. Proposed fixes go through PR + CI; reporting grants
+no deployment or trading authority.
 
 ## Standard Monthly Flow
 
