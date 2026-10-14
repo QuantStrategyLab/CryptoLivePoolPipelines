@@ -1,0 +1,31 @@
+name: Monthly Review Dead-man
+on:
+  schedule:
+    - cron: '45 6 * * *'
+  workflow_run:
+    workflows: [Monthly Publish]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: monthly-review-deadman
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Check review liveness independently
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_DEADMAN_THRESHOLD: ${{ vars.REVIEW_DEADMAN_THRESHOLD || '3' }}
+          REVIEW_OWNER_LOGIN: ${{ vars.REVIEW_OWNER_LOGIN || 'Pigbibi' }}
+        run: python3 scripts/check_monthly_review_deadman.py

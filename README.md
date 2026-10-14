@@ -52,6 +52,10 @@ a `review unavailable` issue comment. See the [operator runbook](docs/operator_r
 for configuration, conservative input counting, and the issue-comment budget ledger.
 Review results are human research input; the job cannot edit code, open remediation
 PRs, change live settings, or place trades.
+All approvals archive the verdict and close the issue with `auto-verified`. Flags
+receive one deeper Dot task under existing workload grants; only confirmed problems
+or severe consensus notify the owner. An independent dead-man check alerts after
+three failed/skipped cycles. See the runbook for authorization and pause gaps.
 
 ## Repository layout
 
