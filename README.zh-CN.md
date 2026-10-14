@@ -42,9 +42,11 @@ Live-pool artifact 的作用是让策略判断可复现：包括 ranking 输入�
 
 ## 月度 review 自动化
 
-月度 publish workflow 只创建月度 review issue，不再触发 AIAuditBridge 的旧 Codex Audit（该 v1 流程已退役）。需要 AI 复核时，由调用方通过项目授权的 V2 任务服务提交材料。
+月度发布成功后，独立的 review-only 作业读取同一次运行已发布的月报和 `strategy_metrics.json`，各调用一次 OpenAI 和 Anthropic API，单轮审查结果写入既有 `monthly-review` issue 的评论。不再触发 AIAuditBridge 的旧 Codex Audit，不使用 Codex/Cursor CLI，也不自动修改代码或交易配置。
 
-生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；旧的本仓库本地 API review workflow 已移除。
+默认每次输入上限 16,000 token、输出上限 2,500 token、超时 60 秒、零重试，UTC 自然月预算 1 美元。输入按 UTF-8 字节数加固定消息开销保守计数，超限直接跳过，不截断材料。调用前在 issue 评论中预留两次请求的最大费用；预算记录不可读、预算不足或同月重复审查同一月报时不调用 API。缺少既有 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY` 时，日志列明缺失名称，API 作业跳过，并发布 `review unavailable` 评论。配置和预算规则见 [运行手册](docs/operator_runbook.md#monthly-review-only-api-audit)。
+
+生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；新的 API 审查作业位于 `monthly_publish.yml`，只允许读取仓库、下载报告和写 issue 评论。
 
 ## 仓库结构
 

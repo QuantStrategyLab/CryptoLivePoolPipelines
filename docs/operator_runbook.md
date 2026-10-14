@@ -80,19 +80,73 @@ Boundary rules:
 - Research reports and shadow-track diagnostics stay upstream and are not part of the minimum downstream execution contract.
 - Telegram messages from this repository are operational release notifications, not trade execution alerts.
 
-## Monthly review materials and issue
+## Monthly review-only API audit
 
-The monthly publish workflow generates the report bundle and creates a
-`monthly-review` issue containing the review materials. It does not dispatch
-AIAuditBridge, call an AI provider, run an automatic dual-AI audit, or apply AI
-fixes. The former bridge review/remediation orchestration has been retired.
-The old `CODEX_AUDIT_*` provider and bridge settings do not enable that retired
-path and are not evidence of a completed audit.
+The `Monthly Publish` schedule remains `15 3 1 * *` (03:15 UTC on the first of
+each month; 11:15 in Singapore). After successful publication on `main` and creation
+of the existing `monthly-review` issue, a hosted preflight checks the existing
+`OPENAI_API_KEY` and `ANTHROPIC_API_KEY` secrets. It never creates or prints secrets.
+If either is unavailable to the workflow, preflight logs the missing names and
+posts `review unavailable`; the `monthly-dual-api-review` job is skipped. Repository
+and organization secret visibility can differ, so runtime preflight is authoritative.
 
-A successful report workflow confirms material generation and issue creation,
-not AI review completion. A human must arrange any further review and record
-its evidence explicitly. Proposed fixes go through PR + CI; reporting grants
-no deployment or trading authority.
+The isolated hosted review job downloads the monthly artifact from the same run.
+It reads only `monthly_report_bundle.json`, `ai_review_input.md`, and
+`strategy_metrics.json`, and issues one OpenAI Chat Completions request and one
+Anthropic Messages request. Both are single-turn, with no tools, streaming,
+continuations, fallback providers, SDK retries, or CLI agents. A failure in one
+provider still permits the other provider's single request; the final comment marks
+the failed review `review unavailable` and the job fails. Missing/oversized materials
+or a failed budget check make zero API requests and post the same unavailable notice.
+GitHub write failures are not retried because the write may already have succeeded.
+
+| GitHub variable | Default | Accepted range |
+| --- | --- | --- |
+| `MONTHLY_REVIEW_MAX_INPUT_TOKENS` | `16000` per request | 1,024–128,000 |
+| `MONTHLY_REVIEW_MAX_OUTPUT_TOKENS` | `2500` per request | 128–8,192 |
+| `MONTHLY_REVIEW_TIMEOUT_SECONDS` | `60` per request | 1–120 seconds |
+| `MONTHLY_REVIEW_MONTHLY_BUDGET_USD` | `1.00` | greater than 0, at most 100 USD |
+
+Input accounting uses a conservative upper bound: the UTF-8 byte lengths of the
+system instructions and both published materials, including their headings, plus
+256 tokens for fixed message framing. This can reject a report whose actual token
+count would be smaller; it never silently truncates evidence or makes a separate
+token-count API call. Output limits are sent as OpenAI `max_completion_tokens`
+(including reasoning) and Anthropic `max_tokens`. Reported usage is also checked;
+missing usage, over-cap usage, or a truncated answer is unavailable. A wall-clock
+deadline covers each HTTP request and response read. The review job has a five-minute
+overall deadline. Retries are fixed at zero to preserve the exactly-two-request limit.
+
+Models and standard-service rates are fixed in the review script:
+[`gpt-5.4-mini-2026-03-17`](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
+at $0.75/$4.50 per million input/output tokens, and
+[`claude-sonnet-4-6`](https://platform.claude.com/docs/en/models/sonnet-4-6/overview)
+at $3/$15. Defaults reserve **$0.119625** for both calls before either starts,
+including a 10% margin for regional processing charges (API token spend, excluding taxes).
+Model/rate changes require a reviewed code change; update rates when provider pricing
+changes. This budget covers this workflow's calls, not other activity on the API keys.
+
+The durable ledger consists exclusively of reservation comments on existing review
+issues. Runs are serialized by `monthly-dual-api-review-budget`. Before reserving,
+the script reads every page of repository issue comments since the UTC month began,
+counts current-month reservations authored by `github-actions[bot]`, and rejects
+unreadable/incomplete/malformed history, insufficient balance, or an existing
+reservation for the same report month. Reservations are never refunded, even after
+timeout, cancellation, or partial failure; a failed reservation write makes no API
+requests. Do not delete or edit reservation comments, since they preserve the budget
+and rerun record. A rerun of an already reserved report is skipped rather than charged
+again. Human review remains available through the published artifact and issue body.
+
+The review job has only `contents: read`, `actions: read`, and `issues: write`, with
+checkout credentials disabled. It has no cloud identity or repository-write grant.
+Its remote writes are reservation and review comments on the existing issue only.
+The original publisher still owns publication and heartbeat operations. This audit
+does not dispatch AIAuditBridge, fix code, create PRs, mutate releases, change live
+configuration, or authorize promotion/trading. CryptoStrategies consumes the upstream
+pool; these selector/shadow metrics do not prove downstream strategy or live results.
+A successful publisher or an open review issue proves material preparation, not
+completed API review. Check the separate review job and its comment for both
+provider results. The retired `CODEX_AUDIT_*` settings do not enable remediation.
 
 ## Standard Monthly Flow
 
