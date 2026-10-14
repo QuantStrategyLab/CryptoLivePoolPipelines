@@ -12,10 +12,7 @@ concurrency:
 jobs:
   monthly-publish:
     if: github.ref_name != 'logs'
-    runs-on:
-      - self-hosted
-      - Linux
-      - X64
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
       review_issue: ${{ steps.review_issue.outputs.issue_number }}
