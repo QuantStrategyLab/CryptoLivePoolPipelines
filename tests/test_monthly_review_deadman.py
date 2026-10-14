@@ -138,4 +138,3 @@ class HistoryAndNotificationTests(unittest.TestCase):
         self.assertEqual(self.execute(api), 1)
         self.assertEqual(api.call_count, 1)
         self.assertNotIn("payload", api.call_args.kwargs)
-
