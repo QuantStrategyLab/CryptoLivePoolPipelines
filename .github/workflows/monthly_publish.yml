@@ -17,6 +17,9 @@ jobs:
       - Linux
       - X64
     timeout-minutes: 60
+    outputs:
+      review_issue: ${{ steps.review_issue.outputs.issue_number }}
+      report_artifact: ${{ steps.monthly-report.outputs.artifact_name }}
     permissions:
       actions: write
       contents: write
@@ -97,16 +100,6 @@ jobs:
               payload = json.load(handle)
           print(f"artifact_name={payload['artifact_name']}")
           PY
-
-      - name: Include Strategy Metrics in Report Bundle
-        run: |
-          set -euo pipefail
-          if [ -f data/output/strategy_metrics.json ]; then
-            cp data/output/strategy_metrics.json data/output/monthly_report_bundle/strategy_metrics.json
-            echo "Included strategy_metrics.json in report bundle"
-          else
-            echo "Warning: strategy_metrics.json not found — watcher will skip"
-          fi
 
       - name: Append Monthly Report Job Summary
         run: cat data/output/monthly_report_bundle/job_summary.md >> "$GITHUB_STEP_SUMMARY"
@@ -236,3 +229,66 @@ jobs:
           fi
           git commit -m "heartbeat: ${VERSION}"
           git push origin "HEAD:${LOGS_BRANCH}"
+
+  monthly-review-preflight:
+    needs: monthly-publish
+    if: github.ref_name == 'main' && needs.monthly-publish.outputs.review_issue != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      ready: ${{ steps.preflight.outputs.ready }}
+    steps:
+      - name: Checkout review script
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check existing API secrets without exposing values
+        id: preflight
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ needs.monthly-publish.outputs.review_issue }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MONTHLY_REVIEW_MAX_INPUT_TOKENS: ${{ vars.MONTHLY_REVIEW_MAX_INPUT_TOKENS || '16000' }}
+          MONTHLY_REVIEW_MAX_OUTPUT_TOKENS: ${{ vars.MONTHLY_REVIEW_MAX_OUTPUT_TOKENS || '2500' }}
+          MONTHLY_REVIEW_TIMEOUT_SECONDS: ${{ vars.MONTHLY_REVIEW_TIMEOUT_SECONDS || '60' }}
+          MONTHLY_REVIEW_MONTHLY_BUDGET_USD: ${{ vars.MONTHLY_REVIEW_MONTHLY_BUDGET_USD || '1.00' }}
+        run: python3 scripts/run_monthly_dual_api_review.py --preflight
+
+  monthly-dual-api-review:
+    needs: [monthly-publish, monthly-review-preflight]
+    if: needs.monthly-review-preflight.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Serialize reservations across all runs, including manual reruns.
+    concurrency:
+      group: monthly-dual-api-review-budget
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - name: Checkout review script
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Download this run's published monthly materials
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ needs.monthly-publish.outputs.report_artifact }}
+          path: data/output/monthly_report_bundle
+      - name: Post single-turn OpenAI and Anthropic reviews to the existing issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ needs.monthly-publish.outputs.review_issue }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MONTHLY_REVIEW_MAX_INPUT_TOKENS: ${{ vars.MONTHLY_REVIEW_MAX_INPUT_TOKENS || '16000' }}
+          MONTHLY_REVIEW_MAX_OUTPUT_TOKENS: ${{ vars.MONTHLY_REVIEW_MAX_OUTPUT_TOKENS || '2500' }}
+          MONTHLY_REVIEW_TIMEOUT_SECONDS: ${{ vars.MONTHLY_REVIEW_TIMEOUT_SECONDS || '60' }}
+          MONTHLY_REVIEW_MONTHLY_BUDGET_USD: ${{ vars.MONTHLY_REVIEW_MONTHLY_BUDGET_USD || '1.00' }}
+        run: python3 scripts/run_monthly_dual_api_review.py

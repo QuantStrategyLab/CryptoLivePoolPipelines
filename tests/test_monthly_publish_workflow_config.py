@@ -4,6 +4,8 @@ import re
 import unittest
 from pathlib import Path
 
+import yaml
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "monthly_publish.yml"
@@ -23,6 +25,7 @@ EXPECTED_REMOTE_ACTIONS = {
         "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),
         "actions/setup-python": ("ece7cb06caefa5fff74198d8649806c4678c61a1", "v6"),
         "actions/upload-artifact": ("043fb46d1a93c77aae656e7c1c64a875d1fc6a0a", "v7"),
+        "actions/download-artifact": ("9000827ccba6bdab643e8b6fd33ac0654aef8333", "v8"),
         "google-github-actions/auth": ("7c6bc770dae815cd3e89ee6cdf493a5fab2cc093", "v3"),
     },
     LIFECYCLE_WORKFLOW_PATH: {
@@ -74,8 +77,27 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
             "permission-actions: write",
         ):
             self.assertNotIn(retired, workflow)
-        self.assertNotIn("ANTHROPIC_API_KEY", workflow)
-        self.assertNotIn("OPENAI_API_KEY", workflow)
+        self.assertIn("ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}", workflow)
+        self.assertIn("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}", workflow)
+
+    def test_review_jobs_have_no_publish_cloud_or_repository_write_permissions(self) -> None:
+        jobs = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))["jobs"]
+        preflight = jobs["monthly-review-preflight"]
+        review = jobs["monthly-dual-api-review"]
+        self.assertEqual(preflight["permissions"], {"contents": "read", "issues": "write"})
+        self.assertEqual(review["permissions"], {"contents": "read", "actions": "read", "issues": "write"})
+        self.assertIn("github.ref_name == 'main'", preflight["if"])
+        self.assertEqual(review["if"], "needs.monthly-review-preflight.outputs.ready == 'true'")
+        self.assertEqual(review["concurrency"], {"group": "monthly-dual-api-review-budget", "cancel-in-progress": False})
+        self.assertEqual(review["timeout-minutes"], 5)
+        for job in (preflight, review):
+            self.assertEqual(job["runs-on"], "ubuntu-latest")
+            checkout = job["steps"][0]
+            self.assertFalse(checkout["with"]["persist-credentials"])
+            text = str(job)
+            for forbidden in ("google-github-actions", "git push", "codex exec", "cursor", "review_and_fix"):
+                self.assertNotIn(forbidden, text)
+            self.assertNotIn("id-token", text)
 
     def test_privileged_workflows_pin_remote_actions_to_full_commit_shas(self) -> None:
         uses_pattern = re.compile(r"^\s*uses:\s*([^\s#]+)(?:\s+#\s*([^\s#]+))?\s*$", re.MULTILINE)
@@ -90,7 +112,8 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
                 self.assertEqual(separator, "@", f"invalid remote action reference in {workflow_path}")
                 self.assertRegex(revision, r"^[0-9a-f]{40}$")
                 self.assertRegex(tag, r"^v\d+$")
-                self.assertNotIn(action, observed, f"duplicate remote action in {workflow_path}")
+                if action in observed:
+                    self.assertEqual(observed[action], (revision, tag))
                 observed[action] = (revision, tag)
 
             self.assertEqual(observed, expected)
@@ -118,6 +141,8 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         self.assertIn("必须从 GitHub variable 读取", readme)
         self.assertIn("本仓库不再保留 source-local `ai_review.yml`", readme)
         self.assertIn("不再触发 AIAuditBridge", readme)
+        self.assertIn("16,000", readme)
+        self.assertIn("review-only", readme)
         self.assertNotIn("CODEX_AUDIT_PROVIDER", readme)
         self.assertNotIn("CODEX_AUDIT_BRIDGE_REF", readme)
 

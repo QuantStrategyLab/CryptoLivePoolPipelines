@@ -74,6 +74,8 @@ def build_bundle_manifest(output_dir: Path | str, bundle_dir: Path | str) -> dic
         "job_summary.md",
         "monthly_report_bundle.json",
     ]
+    if (root / "strategy_metrics.json").is_file():
+        artifact_files.append("strategy_metrics.json")
 
     return {
         "artifact_name": artifact_name,
@@ -145,6 +147,8 @@ Use this file as the primary review input for the monthly upstream release packa
 - The main question is whether the current monthly 5-symbol pool still looks like a sound production selector output, and what additional research evidence is still missing.
 - Shadow / challenger coverage should be used for strategy-optimization judgment when available. If missing, treat optimization evidence as incomplete rather than forcing a strong conclusion.
 - Downstream BinancePlatform consumes this pool monthly and then applies its own execution logic on top.
+- CryptoStrategies consumes the upstream pool; `strategy_metrics.json` contains upstream selector/shadow evidence, not a downstream strategy backtest or live execution result.
+- Review-only API comments are human research input and do not authorize code changes, trading, or promotion.
 
 ## Strategy review questions
 
@@ -152,6 +156,7 @@ Use this file as the primary review input for the monthly upstream release packa
 2. Are score spread and selected symbols reasonable for a Binance Spot mainstream leader selector?
 3. Is shadow / challenger evidence present, and if not, what is the highest-value missing comparison?
 4. What are the most useful next low-risk research directions before changing production selector logic?
+5. Which CryptoStrategies conclusions remain unsupported without downstream strategy replay or execution evidence?
 
 ## Release Status Summary
 
@@ -191,6 +196,9 @@ def write_bundle(output_dir: Path | str, bundle_dir: Path | str) -> dict[str, An
         "monthly_telegram.txt",
     ):
         shutil.copy2(root / filename, bundle_root / filename)
+
+    if "strategy_metrics.json" in bundle["artifact_files"]:
+        shutil.copy2(root / "strategy_metrics.json", bundle_root / "strategy_metrics.json")
 
     job_summary_path = bundle_root / "job_summary.md"
     ai_review_path = bundle_root / "ai_review_input.md"

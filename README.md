@@ -40,6 +40,19 @@ Live-pool artifacts are used to make strategy decisions reproducible: ranking in
 - **Consumes**: market data inputs, QuantPlatformKit helpers.
 - **Must not**: place trades or bypass downstream artifact contract checks.
 
+## Monthly API review
+
+After a successful monthly publication on `main`, an isolated review job reads that
+run's published `ai_review_input.md` and `strategy_metrics.json`. It makes exactly
+one single-turn OpenAI request and one single-turn Anthropic request, then posts
+their reviews to the existing `monthly-review` issue. Defaults: 16,000 input tokens,
+2,500 output tokens, 60 seconds per request, zero retries, and a $1 UTC-month budget.
+Missing `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` skips the API job with a clear log and
+a `review unavailable` issue comment. See the [operator runbook](docs/operator_runbook.md#monthly-review-only-api-audit)
+for configuration, conservative input counting, and the issue-comment budget ledger.
+Review results are human research input; the job cannot edit code, open remediation
+PRs, change live settings, or place trades.
+
 ## Repository layout
 
 - `src/`: library and runtime code.
