@@ -26,7 +26,8 @@ recovery, partial history, pagination, deduplication, and ambiguous notification
 writes. Operational alerts describe a failed or missing review; they do not imply
 a confirmed financial finding or authorize publication, rerun, repair or orders.
 
-This PR remains draft. CI proves source behavior, not that the monitor has been
-adopted or that any monthly model route/secret is available. An outage of GitHub or
+The monitor uses `GITHUB_REPOSITORY` and defaults the notification owner to that
+repository owner; `REVIEW_OWNER_LOGIN` can override the recipient. CI proves source
+behavior, not that any monthly model route is available. An outage of GitHub or
 of the independent monitor itself still needs an external existing monitor; this
 change cannot deliver a GitHub notification while GitHub is unavailable.

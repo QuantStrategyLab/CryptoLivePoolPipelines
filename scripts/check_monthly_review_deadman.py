@@ -11,7 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.advisory_review_loop import deadman
-from scripts.run_monthly_dual_api_review import REPOSITORY, request_json
+from scripts.run_monthly_dual_api_review import request_json
 
 FIRST_SCHEDULED_CYCLE = (2026, 11)
 INTRODUCED_AT = "2026-10-15T00:00:00Z"
@@ -122,17 +122,18 @@ def missed_months(runs, now):
 
 def main():
     try:
-        if os.environ.get("GITHUB_REPOSITORY") != REPOSITORY:
-            raise ValueError("wrong repository")
+        repository = os.environ.get("GITHUB_REPOSITORY", "")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+            raise ValueError("invalid repository")
         threshold = int(os.environ.get("REVIEW_DEADMAN_THRESHOLD", "3"))
         if not 1 <= threshold <= 24:
             raise ValueError("invalid dead-man threshold")
-        owner = os.environ.get("REVIEW_OWNER_LOGIN", "Pigbibi")
+        owner = os.environ.get("REVIEW_OWNER_LOGIN", repository.split("/", 1)[0])
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}", owner):
             raise ValueError("invalid owner")
         headers = {"Authorization": "Bearer " + os.environ["GITHUB_TOKEN"],
                    "Accept": "application/vnd.github+json"}
-        base = "https://api.github.com/repos/" + REPOSITORY
+        base = "https://api.github.com/repos/" + repository
         runs = fetch_runs(base, headers)
 
         def jobs(run_id):

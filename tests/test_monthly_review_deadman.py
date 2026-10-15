@@ -93,7 +93,7 @@ class HistoryAndNotificationTests(unittest.TestCase):
             self.assertEqual(api.call_count, 2)
 
     def execute(self, api):
-        with patch.dict(os.environ, {"GITHUB_REPOSITORY": monitor.REPOSITORY, "GITHUB_TOKEN": "synthetic-only"}), \
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "example/repository", "GITHUB_TOKEN": "synthetic-only"}), \
              patch.object(monitor, "fetch_runs", return_value=[]), \
              patch.object(monitor, "datetime") as clock, \
              patch.object(monitor, "request_json", side_effect=api):
@@ -111,7 +111,7 @@ class HistoryAndNotificationTests(unittest.TestCase):
         writes = [(url, payload) for url, payload in requests if payload is not None]
         self.assertEqual(len(writes), 1)
         self.assertTrue(writes[0][0].endswith("/issues"))
-        self.assertIn("@Pigbibi", writes[0][1]["body"])
+        self.assertIn("@example", writes[0][1]["body"])
         self.assertIn("operational alert", writes[0][1]["body"])
         self.assertNotIn("synthetic-only", str(writes))
 
