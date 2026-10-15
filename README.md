@@ -1,13 +1,6 @@
 # CryptoLivePoolPipelines
 
-
-## QSL architecture role
-
-- **Layer**: `pipeline`.
-- **Responsibility**: crypto live-pool and release pipeline.
-- **Owns**: monthly live-pool membership, ordering, validation artifacts.
-- **Consumes**: market data inputs, QuantPlatformKit helpers.
-- **Must not**: place trades or bypass downstream artifact contract checks.
+CryptoLivePoolPipelines selects and publishes the monthly crypto live-pool used by QuantStrategyLab's crypto strategies. It ranks candidate symbols, decides which ones stay in the published pool and in what order, and produces the validation artifacts that downstream strategy code reads before trading on them. It does not place trades itself; it is the upstream evidence and release pipeline that other repositories depend on.
 
 [Chinese README](README.zh-CN.md)
 
@@ -38,6 +31,31 @@ CryptoStrategies and BinancePlatform should consume only release artifacts that 
 ## What the artifacts are for
 
 Live-pool artifacts are used to make strategy decisions reproducible: ranking inputs, live-pool snapshots, manifests, validation summaries, and promotion evidence. `live_pool.json` and `artifact_manifest.json` are the stable downstream execution contract; ranking files and research outputs stay upstream evidence unless the contract explicitly promotes them. They are not marketing claims. Before a downstream repository promotes a profile, review the latest artifacts across short, medium, and long windows where applicable.
+
+## QSL architecture role
+
+- **Layer**: `pipeline`.
+- **Responsibility**: crypto live-pool and release pipeline.
+- **Owns**: monthly live-pool membership, ordering, validation artifacts.
+- **Consumes**: market data inputs, QuantPlatformKit helpers.
+- **Must not**: place trades or bypass downstream artifact contract checks.
+
+## Monthly API review
+
+After a successful monthly publication on `main`, an isolated review job reads that
+run's published `ai_review_input.md` and `strategy_metrics.json`. It makes exactly
+one single-turn OpenAI request and one single-turn Anthropic request, then posts
+their reviews to the existing `monthly-review` issue. Defaults: 16,000 input tokens,
+2,500 output tokens, 60 seconds per request, zero retries, and a $1 UTC-month budget.
+Missing `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` skips the API job with a clear log and
+a `review unavailable` issue comment. See the [operator runbook](docs/operator_runbook.md#monthly-review-only-api-audit)
+for configuration, conservative input counting, and the issue-comment budget ledger.
+Review results are human research input; the job cannot edit code, open remediation
+PRs, change live settings, or place trades.
+All approvals archive the verdict and close the issue with `auto-verified`. Flags
+receive one deeper Dot task under existing workload grants; only confirmed problems
+or severe consensus notify the owner. An independent dead-man check alerts after
+three failed/skipped cycles. See the runbook for authorization and pause gaps.
 
 ## Repository layout
 

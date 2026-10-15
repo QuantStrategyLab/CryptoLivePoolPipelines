@@ -18,6 +18,19 @@ SPEC.loader.exec_module(MODULE)
 
 
 class MonthlyReportBundleTests(unittest.TestCase):
+    def test_strategy_metrics_are_published_in_manifest_and_keep_downstream_scope_clear(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.write_fixture_files(Path(tmp_dir))
+            metrics = '{"snapshots": []}\n'
+            (output_dir / "strategy_metrics.json").write_text(metrics, encoding="utf-8")
+            bundle_dir = output_dir / "monthly_report_bundle"
+            outputs = MODULE.write_bundle(output_dir, bundle_dir)
+            self.assertIn("strategy_metrics.json", outputs["bundle"]["artifact_files"])
+            self.assertEqual((bundle_dir / "strategy_metrics.json").read_text(encoding="utf-8"), metrics)
+            review = outputs["ai_review_input"].read_text(encoding="utf-8")
+            self.assertIn("not a downstream strategy backtest", review)
+            self.assertIn("CryptoStrategies conclusions remain unsupported", review)
+
     def test_generated_review_limitation_reaches_bundle_review_input(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

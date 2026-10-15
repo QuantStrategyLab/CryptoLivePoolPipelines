@@ -17,6 +17,9 @@ jobs:
       - Linux
       - X64
     timeout-minutes: 60
+    outputs:
+      review_issue: ${{ steps.review_issue.outputs.issue_number }}
+      report_artifact: ${{ steps.monthly-report.outputs.artifact_name }}
     permissions:
       actions: write
       contents: write
@@ -34,12 +37,6 @@ jobs:
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCS_BUCKET: ${{ vars.GCS_BUCKET }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-      CODEX_AUDIT_ENABLED: ${{ vars.CODEX_AUDIT_ENABLED || 'true' }}
-      CODEX_AUDIT_BRIDGE_REPOSITORY: ${{ vars.CODEX_AUDIT_BRIDGE_REPOSITORY || 'QuantStrategyLab/AIAuditBridge' }}
-      CODEX_AUDIT_BRIDGE_REF: ${{ vars.CODEX_AUDIT_BRIDGE_REF || 'main' }}
-      CODEX_AUDIT_MODE: ${{ vars.CODEX_AUDIT_MODE || 'review_and_fix' }}
-      CODEX_AUDIT_PROVIDER: ${{ vars.CODEX_AUDIT_PROVIDER || 'auto' }}
-      CODEX_AUDIT_AUTO_MERGE: ${{ vars.CODEX_AUDIT_AUTO_MERGE || 'false' }}
 
     steps:
       - name: Checkout
@@ -104,21 +101,11 @@ jobs:
           print(f"artifact_name={payload['artifact_name']}")
           PY
 
-      - name: Include Strategy Metrics in Report Bundle
-        run: |
-          set -euo pipefail
-          if [ -f data/output/strategy_metrics.json ]; then
-            cp data/output/strategy_metrics.json data/output/monthly_report_bundle/strategy_metrics.json
-            echo "Included strategy_metrics.json in report bundle"
-          else
-            echo "Warning: strategy_metrics.json not found — watcher will skip"
-          fi
-
       - name: Append Monthly Report Job Summary
         run: cat data/output/monthly_report_bundle/job_summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Monthly Report Artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ steps.monthly-report.outputs.artifact_name }}
           path: data/output/monthly_report_bundle
@@ -196,121 +183,6 @@ jobs:
               print(f"issue_url={issue['html_url']}", file=output)
           PY
 
-      - name: Detect Codex Audit GitHub App Credentials
-        id: codex_review_app_credentials
-        if: success() && env.PUBLISH_ENABLED != 'false' && env.CODEX_AUDIT_ENABLED != 'false'
-        env:
-          APP_ID: ${{ vars.CROSS_REPO_GITHUB_APP_ID }}
-          APP_PRIVATE_KEY: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -n "${APP_ID:-}" ] && [ -n "${APP_PRIVATE_KEY:-}" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create GitHub App Token For Codex Audit
-        id: codex_review_app_token
-        if: steps.codex_review_app_credentials.outputs.available == 'true'
-        continue-on-error: true
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
-        with:
-          app-id: ${{ vars.CROSS_REPO_GITHUB_APP_ID }}
-          private-key: ${{ secrets.CROSS_REPO_GITHUB_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: |
-            AIAuditBridge
-          permission-actions: write
-
-      - name: Trigger Monthly Review Automation
-        if: success() && env.PUBLISH_ENABLED != 'false'
-        env:
-          APP_TOKEN: ${{ steps.codex_review_app_token.outputs.token }}
-          CODEX_AUDIT_DISPATCH_TOKEN: ${{ secrets.CODEX_AUDIT_DISPATCH_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-          ISSUE_NUMBER: ${{ steps.review_issue.outputs.issue_number }}
-          ISSUE_URL: ${{ steps.review_issue.outputs.issue_url }}
-          TARGET_REPOSITORY: ${{ env.CODEX_AUDIT_BRIDGE_REPOSITORY }}
-          REVIEW_MODE: ${{ env.CODEX_AUDIT_MODE }}
-          REVIEW_PROVIDER: ${{ env.CODEX_AUDIT_PROVIDER }}
-          AUTO_MERGE: ${{ env.CODEX_AUDIT_AUTO_MERGE }}
-          CODEX_AUDIT_ENABLED_RUNTIME: ${{ env.CODEX_AUDIT_ENABLED }}
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          import os
-          import re
-          import urllib.error
-          import urllib.request
-
-          def enabled(name: str) -> bool:
-              return os.environ.get(name, "").strip().lower() == "true"
-
-          def dispatch(token: str, url: str, payload: dict) -> int:
-              request = urllib.request.Request(
-                  url,
-                  data=json.dumps(payload).encode("utf-8"),
-                  method="POST",
-                  headers={
-                      "Authorization": f"Bearer {token}",
-                      "Accept": "application/vnd.github+json",
-                      "Content-Type": "application/json",
-                      "X-GitHub-Api-Version": "2022-11-28",
-                      "User-Agent": "crypto-live-pool-pipelines-monthly-publish",
-                  },
-              )
-              with urllib.request.urlopen(request) as response:
-                  return response.status
-
-          def dispatch_codex() -> None:
-              token = os.environ.get("APP_TOKEN", "").strip() or os.environ.get("CODEX_AUDIT_DISPATCH_TOKEN", "").strip()
-              if not token:
-                  raise RuntimeError(
-                      "Codex audit workflow dispatch requires either a GitHub App token or CODEX_AUDIT_DISPATCH_TOKEN"
-                  )
-              target_repository = os.environ["TARGET_REPOSITORY"].strip()
-              if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", target_repository):
-                  raise RuntimeError(f"Invalid Codex audit repository: {target_repository!r}")
-              mode = os.environ["REVIEW_MODE"].strip() or "review_and_fix"
-              if mode not in {"review_only", "review_and_fix"}:
-                  raise RuntimeError(f"Unsupported Codex audit mode: {mode}")
-              provider = os.environ["REVIEW_PROVIDER"].strip() or "codex"
-              if provider not in {"api", "anthropic", "codex", "openai", "auto"}:
-                  raise RuntimeError(f"Unsupported Codex audit provider: {provider}")
-              payload = {
-                  "ref": os.environ["CODEX_AUDIT_BRIDGE_REF"],
-                  "inputs": {
-                      "source_repo": os.environ["GITHUB_REPOSITORY"],
-                      "source_ref": os.environ["GITHUB_REF_NAME"],
-                      "issue_number": os.environ["ISSUE_NUMBER"],
-                      "mode": mode,
-                      "provider": provider,
-                      "auto_merge": str(os.environ["AUTO_MERGE"].strip().lower() == "true").lower(),
-                  },
-              }
-              status = dispatch(
-                  token,
-                  f"https://api.github.com/repos/{target_repository}/actions/workflows/codex_audit.yml/dispatches",
-                  payload,
-              )
-              if status not in (201, 204):
-                  raise RuntimeError(f"Unexpected Codex dispatch status: {status}")
-              print(
-                  f"Dispatched AIAuditBridge review for issue #{os.environ['ISSUE_NUMBER']} "
-                  f"to {target_repository}"
-              )
-
-          if enabled("CODEX_AUDIT_ENABLED_RUNTIME"):
-              dispatch_codex()
-              raise SystemExit(0)
-
-          raise RuntimeError("Codex audit bridge dispatch is disabled by CODEX_AUDIT_ENABLED=false")
-          PY
-
       - name: Write Release Heartbeat
         if: success() && env.PUBLISH_ENABLED != 'false'
         env:
@@ -357,3 +229,81 @@ jobs:
           fi
           git commit -m "heartbeat: ${VERSION}"
           git push origin "HEAD:${LOGS_BRANCH}"
+
+  monthly-review-preflight:
+    needs: monthly-publish
+    if: github.ref_name == 'main' && needs.monthly-publish.outputs.review_issue != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      ready: ${{ steps.preflight.outputs.ready }}
+    steps:
+      - name: Checkout review script
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check existing API secrets without exposing values
+        id: preflight
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ needs.monthly-publish.outputs.review_issue }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MONTHLY_REVIEW_MAX_INPUT_TOKENS: ${{ vars.MONTHLY_REVIEW_MAX_INPUT_TOKENS || '16000' }}
+          MONTHLY_REVIEW_MAX_OUTPUT_TOKENS: ${{ vars.MONTHLY_REVIEW_MAX_OUTPUT_TOKENS || '2500' }}
+          MONTHLY_REVIEW_TIMEOUT_SECONDS: ${{ vars.MONTHLY_REVIEW_TIMEOUT_SECONDS || '60' }}
+          MONTHLY_REVIEW_MONTHLY_BUDGET_USD: ${{ vars.MONTHLY_REVIEW_MONTHLY_BUDGET_USD || '1.00' }}
+        run: python3 scripts/run_monthly_dual_api_review.py --preflight
+
+  monthly-dual-api-review:
+    needs: [monthly-publish, monthly-review-preflight]
+    if: needs.monthly-review-preflight.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Serialize reservations across all runs, including manual reruns.
+    concurrency:
+      group: monthly-dual-api-review-budget
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout review script
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Download this run's published monthly materials
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ needs.monthly-publish.outputs.report_artifact }}
+          path: data/output/monthly_report_bundle
+      - name: Post single-turn OpenAI and Anthropic reviews to the existing issue
+        env:
+          AI_SERVICE_URL: ${{ vars.AI_SERVICE_URL }}
+          AI_SERVICE_AUDIENCE: ${{ vars.AI_SERVICE_AUDIENCE }}
+          AI_SERVICE_PROFILE: ${{ vars.AI_SERVICE_PROFILE }}
+          AI_SERVICE_MODEL: ${{ vars.AI_SERVICE_MODEL }}
+          REVIEW_OWNER_LOGIN: ${{ vars.REVIEW_OWNER_LOGIN || 'Pigbibi' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ needs.monthly-publish.outputs.review_issue }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MONTHLY_REVIEW_MAX_INPUT_TOKENS: ${{ vars.MONTHLY_REVIEW_MAX_INPUT_TOKENS || '16000' }}
+          MONTHLY_REVIEW_MAX_OUTPUT_TOKENS: ${{ vars.MONTHLY_REVIEW_MAX_OUTPUT_TOKENS || '2500' }}
+          MONTHLY_REVIEW_TIMEOUT_SECONDS: ${{ vars.MONTHLY_REVIEW_TIMEOUT_SECONDS || '60' }}
+          MONTHLY_REVIEW_MONTHLY_BUDGET_USD: ${{ vars.MONTHLY_REVIEW_MONTHLY_BUDGET_USD || '1.00' }}
+        run: python3 scripts/run_monthly_dual_api_review.py
+
+      - name: Archive review verdict even when escalation is unavailable
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: monthly-review-verdict-${{ github.run_id }}-${{ github.run_attempt }}
+          path: data/output/monthly_review_verdict.json
+          if-no-files-found: warn
+          retention-days: 90

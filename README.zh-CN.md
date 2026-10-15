@@ -1,13 +1,6 @@
 # CryptoLivePoolPipelines
 
-
-## QSL 架构角色
-
-- **层级**：`快照/证据流水线`。
-- **职责**：加密 live-pool 与发布流水线。
-- **事实源/归属**：月度 live-pool 成员、排序、验证 artifacts。
-- **消费对象**：市场数据输入、QuantPlatformKit helpers。
-- **禁止事项**：下单或绕过下游 artifact contract 检查。
+CryptoLivePoolPipelines 负责挑选并发布 QuantStrategyLab 加密策略所用的月度 live-pool。它对候选币种排序，决定哪些币种留在已发布的池子里、顺序如何排列，并产出下游策略代码在下单前要读取的验证产物。它本身不下单，是其它仓库依赖的上游证据与发布流水线。
 
 [English README](README.md)
 
@@ -39,11 +32,21 @@ CryptoStrategies 和 BinancePlatform 应只消费通过 contract 检查的发布
 
 Live-pool artifact 的作用是让策略判断可复现：包括 ranking 输入、live-pool snapshot、manifest、validation summary 和提升证据。`live_pool.json` 和 `artifact_manifest.json` 是稳定的下游执行合约；ranking 文件和研究输出默认留在上游作为证据，除非合约明确提升它们。它们不是宣传式收益承诺。下游仓库提升 profile 前，应在适用场景下检查最新短、中、长周期产物。
 
+## QSL 架构角色
+
+- **层级**：`快照/证据流水线`。
+- **职责**：加密 live-pool 与发布流水线。
+- **事实源/归属**：月度 live-pool 成员、排序、验证 artifacts。
+- **消费对象**：市场数据输入、QuantPlatformKit helpers。
+- **禁止事项**：下单或绕过下游 artifact contract 检查。
+
 ## 月度 review 自动化
 
-月度 publish workflow 通过 `AIAuditBridge` 触发自动 review 和 remediation；`CODEX_AUDIT_PROVIDER` 默认走 `auto`，优先调用 AIAuditBridge 的 HTTPS/443 service-backed Codex 路径，再按桥接仓库配置 fallback 到 API reviewer。`OPENAI_API_KEY` 和 `ANTHROPIC_API_KEY` 等 provider secret 配置在 `AIAuditBridge`，本仓库不直接读取这些 provider key。可通过 `CODEX_AUDIT_BRIDGE_REF` pin 到指定 bridge ref，默认 `main`。
+月度发布成功后，独立的 review-only 作业读取同一次运行已发布的月报和 `strategy_metrics.json`，各调用一次 OpenAI 和 Anthropic API，单轮审查结果写入既有 `monthly-review` issue 的评论。不再触发 AIAuditBridge 的旧 Codex Audit，不使用 Codex/Cursor CLI，也不自动修改代码或交易配置。
 
-生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；旧的本仓库本地 API review workflow 已移除，provider 选择和 fallback 逻辑集中在 `AIAuditBridge`。
+默认每次输入上限 16,000 token、输出上限 2,500 token、超时 60 秒、零重试，UTC 自然月预算 1 美元。输入按 UTF-8 字节数加固定消息开销保守计数，超限直接跳过，不截断材料。调用前在 issue 评论中预留两次请求的最大费用；预算记录不可读、预算不足或同月重复审查同一月报时不调用 API。缺少既有 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY` 时，日志列明缺失名称，API 作业跳过，并发布 `review unavailable` 评论。配置和预算规则见 [运行手册](docs/operator_runbook.md#monthly-review-only-api-audit)。
+
+生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；新的 API 审查作业位于 `monthly_publish.yml`，只允许读取仓库、下载报告和写 issue 评论。
 
 ## 仓库结构
 
