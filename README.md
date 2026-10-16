@@ -95,8 +95,13 @@ the configuration and budget rules.
 Production publish targets such as the GCP project, GCS bucket, and Firestore
 document must be read from GitHub variables. This repository no longer keeps a
 source-local `ai_review.yml`; the new API review job lives in
-`monthly_publish.yml` and is limited to reading the repository, downloading the
-report, and writing issue comments.
+`monthly_publish.yml`. It reads the repository and the published report, writes
+issue comments, archives the verdict, and updates review state. It marks the
+review issue `auto-verified` and closes it when both API reviews approve; when a
+review flags a concern, it submits one bounded deeper advisory review if an
+approved AIGateway route is configured, and closes the issue unless that review
+confirms a real problem. It does not edit code, change live configuration, or
+authorize promotion or trading.
 
 ## Repository layout
 

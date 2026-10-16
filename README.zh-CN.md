@@ -66,7 +66,7 @@ make monthly-shadow-check
 
 默认每次请求输入上限 16,000 token、输出上限 2,500 token、超时 60 秒、零重试，UTC 自然月预算 1 美元。输入按 UTF-8 字节数加固定消息开销保守计数，超限直接跳过而不截断。缺少 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY` 时 API 作业跳过，并发布 `review unavailable` 评论。配置与预算规则见[运行手册](docs/operator_runbook.md#monthly-review-only-api-audit)。
 
-生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；新的 API 审查作业位于 `monthly_publish.yml`，只允许读取仓库、下载报告和写 issue 评论。
+生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；新的 API 审查作业位于 `monthly_publish.yml`。它读取仓库和已发布报告，写入 issue 评论、归档审查结论，并更新 review 状态。两次 API 审查均 approve 时，它将 review issue 标记为 `auto-verified` 并关闭；有审查 flag 时，若配置了已批准的 AIGateway 路由，它会提交一次有界的深入 advisory 审查，除非该审查确认存在真实问题，否则关闭 issue。它不修改代码、不改动线上配置，也不授权上线或交易。
 
 ## 仓库结构
 
