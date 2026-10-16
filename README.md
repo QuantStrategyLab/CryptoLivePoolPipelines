@@ -1,100 +1,128 @@
 # CryptoLivePoolPipelines
 
-CryptoLivePoolPipelines selects and publishes the monthly crypto live-pool used by QuantStrategyLab's crypto strategies. It ranks candidate symbols, decides which ones stay in the published pool and in what order, and produces the validation artifacts that downstream strategy code reads before trading on them. It does not place trades itself; it is the upstream evidence and release pipeline that other repositories depend on.
+Pipeline that selects and publishes the monthly crypto live-pool used by QuantStrategyLab crypto strategies.
 
-[Chinese README](README.zh-CN.md)
+English | [简体中文](README.zh-CN.md)
 
-> Investing involves risk. This project does not provide investment advice and is for education, research, and engineering review only.
+## Status
 
-## What this repository is
+Experimental. Use at your own risk. This project is not financial advice and
+does not guarantee any trading result. Its outputs are research evidence and
+release artifacts, not trading instructions. It does not place trades.
 
-CryptoLivePoolPipelines is the QuantStrategyLab crypto live-pool and release pipeline. It is the authority for monthly crypto live-pool membership, ordering, rankings, shadow candidate tracks, and release artifacts used by CryptoStrategies.
+## What this is
 
-It is an evidence-producing repository. It does not place trades and should not be treated as an execution platform.
+CryptoLivePoolPipelines owns the monthly crypto live-pool: candidate ranking,
+pool membership and order, shadow validation tracks, and the release artifacts
+that downstream strategy code reads. It consumes market data and QuantPlatformKit
+helpers and writes versioned artifacts under a documented contract. It is the
+upstream evidence and release layer for crypto strategy runtimes.
 
-## Strategy and evidence boundary
+## What this is not
 
-### Direct runtime strategies
-
-The trading logic lives in CryptoStrategies. This repository produces the live-pool and validation artifacts that the strategy package reads, and it owns the monthly selection and order of the published pool.
-
-### Snapshot-backed work handled here
-
-- core_major live pool artifacts
-- monthly live-pool shadow validation
-- external-data and candidate-track research outputs
-
-### Downstream use
-
-CryptoStrategies and BinancePlatform should consume only release artifacts that pass the documented contract checks. Downstream systems should preserve `live_pool.json["symbols"]` order and should not rebuild the monthly pool from local indicators.
-
-## What the artifacts are for
-
-Live-pool artifacts are used to make strategy decisions reproducible: ranking inputs, live-pool snapshots, manifests, validation summaries, and promotion evidence. `live_pool.json` and `artifact_manifest.json` are the stable downstream execution contract; ranking files and research outputs stay upstream evidence unless the contract explicitly promotes them. They are not marketing claims. Before a downstream repository promotes a profile, review the latest artifacts across short, medium, and long windows where applicable.
-
-## QSL architecture role
-
-- **Layer**: `pipeline`.
-- **Responsibility**: crypto live-pool and release pipeline.
-- **Owns**: monthly live-pool membership, ordering, validation artifacts.
-- **Consumes**: market data inputs, QuantPlatformKit helpers.
-- **Must not**: place trades or bypass downstream artifact contract checks.
-
-## Monthly API review
-
-After a successful monthly publication on `main`, an isolated review job reads that
-run's published `ai_review_input.md` and `strategy_metrics.json`. It makes exactly
-one single-turn OpenAI request and one single-turn Anthropic request, then posts
-their reviews to the existing `monthly-review` issue. Defaults: 16,000 input tokens,
-2,500 output tokens, 60 seconds per request, zero retries, and a $1 UTC-month budget.
-Missing `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` skips the API job with a clear log and
-a `review unavailable` issue comment. See the [operator runbook](docs/operator_runbook.md#monthly-review-only-api-audit)
-for configuration, conservative input counting, and the issue-comment budget ledger.
-Review results are human research input; the job cannot edit code, open remediation
-PRs, change live settings, or place trades.
-All approvals archive the verdict and close the issue with `auto-verified`. Flags
-receive one deeper Dot task under existing workload grants; only confirmed problems
-or severe consensus notify the owner. An independent dead-man check alerts after
-three failed/skipped cycles. See the runbook for authorization and pause gaps.
-
-## Repository layout
-
-- `src/`: library and runtime code.
-- `tests/`: unit, contract, and regression tests.
-- `docs/`: runbooks, design notes, evidence, and integration contracts.
-- `.github/workflows/`: CI, scheduled jobs, release, or deployment workflows.
-- `scripts/`: operator scripts and local helpers.
-- `config/`: runtime or pipeline configuration.
+It does not place trades and is not an execution platform. It does not decide
+strategy logic; the trading logic lives in `CryptoStrategies`. Downstream systems
+must not rebuild the pool from local indicators instead of the published
+artifacts.
 
 ## Quick start
 
+Requires Python 3.11 or newer.
+
+Create the project virtual environment and install the pinned runtime
+requirements into it:
+
 ```bash
-python -m pip install -r requirements.txt
-python -m pytest -q
+python -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements-lock.txt
 ```
 
-## Useful docs
+Run the unit tests:
 
-- [`docs/external_data_roadmap.md`](docs/external_data_roadmap.md)
-- [`docs/external_data_validation.md`](docs/external_data_validation.md)
-- [`docs/integration_contract.md`](docs/integration_contract.md)
-- [`docs/operator_runbook.md`](docs/operator_runbook.md)
-- [`docs/validation_status.md`](docs/validation_status.md)
+```bash
+.venv/bin/python -m unittest discover -s tests
+```
 
-## Safety and contribution notes
+Build and check a monthly shadow release locally. The `make` targets invoke
+`.venv/bin/python` (see [`Makefile`](Makefile)), so create `.venv` first as
+shown above:
 
-- Keep generated data, credentials, and private account details out of Git unless the artifact is intentionally public and documented.
-- Prefer reproducible commands and explicit output directories.
-- Do not promote a research artifact to live use without the documented validation evidence.
+```bash
+make monthly-shadow-build
+make monthly-shadow-check
+```
 
-## Community and security
+## Configuration
 
-- See [CONTRIBUTING.md](CONTRIBUTING.md) for pull request scope, local verification, and documentation expectations.
-- Follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for maintainer and contributor conduct.
-- Report credential, automation, broker, exchange, or cloud-resource vulnerabilities through [SECURITY.md](SECURITY.md); do not open public issues for secrets or live-execution risk.
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `PUBLISH_ENABLED` | No | `false` | Allow publishing release artifacts. |
+| `PUBLISH_MODE` | No | `core_major` | Publish mode for release objects. |
+| `GCS_BUCKET` | No | none | Bucket for published release objects. |
+| `CLOUD_PROJECT_ID` | No | none | Google Cloud project for storage and Firestore. |
+| `FIRESTORE_COLLECTION` | No | `strategy` | Collection that receives the current-pointer document. |
+| `FIRESTORE_DOCUMENT` | No | `CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL` | Document that receives the current-pointer payload. |
+| `UPLOAD_CURRENT_POINTER` | No | `true` | Update the current-pointer pointer after publish. |
+| `TELEGRAM_BOT_TOKEN` | No | none | Bot token for monthly notifications. |
+| `GLOBAL_TELEGRAM_CHAT_ID` | No | none | Chat that receives monthly notifications. |
+| `NOTIFY_LANG` | No | `en` | Notification language. |
+| `REVIEW_DEADMAN_THRESHOLD` | No | `3` | Failed or skipped cycles before the dead-man alert. |
+| `QSL_DISPLAY_NAMES_JSON` | No | none | Display-name overrides for notifications. |
+
+Pipeline inputs and defaults live in [`config/default.yaml`](config/default.yaml).
+The publish bucket and project identifiers are unset by default; provide them
+through the environment variables above or your config file.
+
+## Monthly review automation
+
+After a successful monthly publish, a separate review-only job reads the
+released monthly report and `strategy_metrics.json` from the same run, issues one
+OpenAI and one Anthropic request, and posts the single-turn result as a comment
+on the existing `monthly-review` issue. It does not trigger the retired
+AIAuditBridge Codex Audit, does not use the Codex or Cursor CLI, and does not
+modify code or trading configuration.
+
+The default per-request input cap is 16,000 tokens, the output cap is 2,500
+tokens, the timeout is 60 seconds, retries are zero, and the natural-month budget
+is 1 USD. Input is counted conservatively as UTF-8 byte lengths plus fixed
+message overhead, so oversized input is skipped rather than truncated. Missing
+`OPENAI_API_KEY` or `ANTHROPIC_API_KEY` skips the API job and posts a
+`review unavailable` comment. See the
+[operator runbook](docs/operator_runbook.md#monthly-review-only-api-audit) for
+the configuration and budget rules.
+
+Production publish targets such as the GCP project, GCS bucket, and Firestore
+document must be read from GitHub variables. This repository no longer keeps a
+source-local `ai_review.yml`; the new API review job lives in
+`monthly_publish.yml`. It reads the repository and the published report, writes
+issue comments, archives the verdict, and updates review state. It marks the
+review issue `auto-verified` and closes it when both API reviews approve; when a
+review flags a concern, it submits one bounded deeper advisory review if an
+approved AIGateway route is configured, and closes the issue unless that review
+confirms a real problem. It does not edit code, change live configuration, or
+authorize promotion or trading.
+
+## Repository layout
+
+```
+src/        pipeline, ranking, validation, and publish code
+scripts/    operator scripts and monthly jobs
+config/     pipeline configuration
+data/       local and generated output
+docs/       contracts, roadmap, and operator runbook
+tests/      unit and contract tests
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security
+
+See [SECURITY.md](SECURITY.md). Do not open a public issue for a vulnerability.
+Keep credentials, private account details, and generated data out of Git.
 
 ## License
 
-See [LICENSE](LICENSE).
-
-Display/notification naming configuration: [display names](docs/display-names.md).
+MIT. See [LICENSE](LICENSE).
