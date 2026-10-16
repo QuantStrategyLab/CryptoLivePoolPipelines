@@ -20,12 +20,21 @@ CryptoLivePoolPipelines 负责月度加密 live-pool：候选排名、池内成�
 
 需要 Python 3.11 或更高版本。
 
+创建项目虚拟环境并安装锁定的运行时依赖：
+
 ```bash
-python -m pip install -r requirements.txt
-python -m unittest discover -s tests
+python -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements-lock.txt
 ```
 
-在本地构建并检查一次月度 shadow 发布：
+运行单元测试：
+
+```bash
+.venv/bin/python -m unittest discover -s tests
+```
+
+在本地构建并检查一次月度 shadow 发布。`make` 目标调用 `.venv/bin/python`（见 [`Makefile`](Makefile)），因此请先按上面的步骤创建 `.venv`：
 
 ```bash
 make monthly-shadow-build
@@ -50,6 +59,14 @@ make monthly-shadow-check
 | `QSL_DISPLAY_NAMES_JSON` | 否 | 无 | 通知显示名覆盖。 |
 
 管线输入与默认值见 [`config/default.yaml`](config/default.yaml)。发布所用的 bucket 与项目标识默认未设置，可通过上表中的环境变量或配置文件提供。
+
+## 月度 review 自动化
+
+月度发布成功后，一个独立的 review-only 作业读取同一次运行已发布的月报和 `strategy_metrics.json`，各调用一次 OpenAI 和 Anthropic API，并把单轮结果作为评论写到既有 `monthly-review` issue 上。它不再触发 AIAuditBridge 的旧 Codex Audit，不使用 Codex 或 Cursor CLI，也不修改代码或交易配置。
+
+默认每次请求输入上限 16,000 token、输出上限 2,500 token、超时 60 秒、零重试，UTC 自然月预算 1 美元。输入按 UTF-8 字节数加固定消息开销保守计数，超限直接跳过而不截断。缺少 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY` 时 API 作业跳过，并发布 `review unavailable` 评论。配置与预算规则见[运行手册](docs/operator_runbook.md#monthly-review-only-api-audit)。
+
+生产发布目标如 GCP project、GCS bucket 和 Firestore document 必须从 GitHub variable 读取。本仓库不再保留 source-local `ai_review.yml`；新的 API 审查作业位于 `monthly_publish.yml`，只允许读取仓库、下载报告和写 issue 评论。
 
 ## 仓库结构
 

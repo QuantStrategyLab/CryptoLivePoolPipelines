@@ -29,12 +29,24 @@ artifacts.
 
 Requires Python 3.11 or newer.
 
+Create the project virtual environment and install the pinned runtime
+requirements into it:
+
 ```bash
-python -m pip install -r requirements.txt
-python -m unittest discover -s tests
+python -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements-lock.txt
 ```
 
-Build and check a monthly shadow release locally:
+Run the unit tests:
+
+```bash
+.venv/bin/python -m unittest discover -s tests
+```
+
+Build and check a monthly shadow release locally. The `make` targets invoke
+`.venv/bin/python` (see [`Makefile`](Makefile)), so create `.venv` first as
+shown above:
 
 ```bash
 make monthly-shadow-build
@@ -61,6 +73,30 @@ make monthly-shadow-check
 Pipeline inputs and defaults live in [`config/default.yaml`](config/default.yaml).
 The publish bucket and project identifiers are unset by default; provide them
 through the environment variables above or your config file.
+
+## Monthly review automation
+
+After a successful monthly publish, a separate review-only job reads the
+released monthly report and `strategy_metrics.json` from the same run, issues one
+OpenAI and one Anthropic request, and posts the single-turn result as a comment
+on the existing `monthly-review` issue. It does not trigger the retired
+AIAuditBridge Codex Audit, does not use the Codex or Cursor CLI, and does not
+modify code or trading configuration.
+
+The default per-request input cap is 16,000 tokens, the output cap is 2,500
+tokens, the timeout is 60 seconds, retries are zero, and the natural-month budget
+is 1 USD. Input is counted conservatively as UTF-8 byte lengths plus fixed
+message overhead, so oversized input is skipped rather than truncated. Missing
+`OPENAI_API_KEY` or `ANTHROPIC_API_KEY` skips the API job and posts a
+`review unavailable` comment. See the
+[operator runbook](docs/operator_runbook.md#monthly-review-only-api-audit) for
+the configuration and budget rules.
+
+Production publish targets such as the GCP project, GCS bucket, and Firestore
+document must be read from GitHub variables. This repository no longer keeps a
+source-local `ai_review.yml`; the new API review job lives in
+`monthly_publish.yml` and is limited to reading the repository, downloading the
+report, and writing issue comments.
 
 ## Repository layout
 
