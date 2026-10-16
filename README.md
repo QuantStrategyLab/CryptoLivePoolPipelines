@@ -96,3 +96,5 @@ python -m pytest -q
 ## License
 
 See [LICENSE](LICENSE).
+
+Display/notification naming configuration: [display names](docs/display-names.md).

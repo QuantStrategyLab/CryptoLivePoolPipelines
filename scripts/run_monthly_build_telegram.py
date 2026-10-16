@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+try:
+    from display_names import display_name
+except ImportError:  # Imported as scripts.run_monthly_build_telegram
+    from scripts.display_names import display_name
 import json
 import os
 import urllib.parse
@@ -248,7 +252,7 @@ def format_message(payload: dict[str, Any], *, lang: str | None = None) -> str:
             active_lang,
             "official_summary",
             official=text(active_lang, "official"),
-            profile=official["profile"],
+            profile=display_name("strategies", official["profile"], active_lang),
             version=official["version"],
             mode=official["mode"],
             pool_size=official["pool_size"],
