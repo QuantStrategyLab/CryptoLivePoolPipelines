@@ -130,11 +130,12 @@ class IssueComments:
         request_json(f"{self.base}/issues/{self.issue}/comments", self.headers,
                      payload={"body": body})
 
-    def history(self, month):
-        since = urllib.parse.quote(f"{month}-01T00:00:00Z", safe="")
+    def history(self, month=None):
+        since = "" if month is None else (
+            "&since=" + urllib.parse.quote(f"{month}-01T00:00:00Z", safe=""))
         comments = []
         for page in range(1, 101):
-            data = request_json(f"{self.base}/issues/comments?since={since}&per_page=100&page={page}",
+            data = request_json(f"{self.base}/issues/comments?per_page=100&page={page}{since}",
                                 self.headers)
             if not isinstance(data, list):
                 raise ReviewUnavailable("monthly budget history unavailable")
@@ -175,20 +176,23 @@ class IssueComments:
 def reserve_budget(issue, config, report_month, now):
     month = now.strftime("%Y-%m")
     spent = Decimal(0)
-    for comment in issue.history(month):
+    # A monthly budget resets; an ambiguous report reservation never does.
+    for comment in issue.history(None):
         body = comment.get("body", "")
         if (comment.get("user", {}).get("login") != "github-actions[bot]"
-                or not body.startswith(LEDGER_PREFIX)
-                or str(comment.get("created_at", ""))[:7] != month):
+                or not body.startswith(LEDGER_PREFIX)):
             continue
         try:
             ledger = json.loads(body[len(LEDGER_PREFIX):].split(" -->", 1)[0])
             amount = Decimal(ledger["reserved_usd"])
-            if ledger["budget_month"] != month or not amount.is_finite() or amount <= 0:
+            ledger_month = ledger["budget_month"]
+            if (ledger_month != str(comment.get("created_at", ""))[:7]
+                    or not amount.is_finite() or amount <= 0):
                 raise ValueError
             if ledger["report_month"] == report_month:
-                raise ReviewUnavailable("this report already has a reservation in the current UTC month")
-            spent += amount
+                raise ReviewUnavailable("this report already has a reservation; no replay across UTC months")
+            if ledger_month == month:
+                spent += amount
         except (ValueError, KeyError, TypeError, ArithmeticError):
             raise ReviewUnavailable("monthly budget ledger invalid") from None
     reserved = config.reservation()
