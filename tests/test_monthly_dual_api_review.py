@@ -26,6 +26,7 @@ class FakeIssue:
     def __init__(self, history=()):
         self.comments = []
         self.ledger = list(history)
+        self.created_at = "2026-10-15T01:00:00Z"
 
     def own_comments(self):
         return self.ledger
@@ -38,7 +39,7 @@ class FakeIssue:
 
     def post(self, body):
         self.comments.append(body)
-        self.ledger.append({"body": body, "created_at": "2026-10-15T01:00:00Z",
+        self.ledger.append({"body": body, "created_at": self.created_at,
                             "user": {"login": "github-actions[bot]"}})
 
 
@@ -160,6 +161,53 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
         self.assertIn("already has a reservation", self.issue.comments[-1])
         for client in self.clients.values():
             client.review.assert_called_once()
+
+    def test_unknown_report_not_replayed_after_utc_month_rollover(self):
+        for failures in (("OpenAI",), ("OpenAI", "Anthropic")):
+            with self.subTest(failures=failures):
+                self.issue = FakeIssue()
+                self.clients = {
+                    name: Mock(review=Mock(return_value=json.dumps({
+                        "verdict": "approve", "severity": "none", "summary": "Review finding",
+                    }))) for name in ("OpenAI", "Anthropic")
+                }
+                for provider in failures:
+                    self.clients[provider].review.side_effect = TimeoutError
+                first = datetime(2026, 10, 31, 23, 59, tzinfo=timezone.utc)
+                self.issue.created_at = first.isoformat()
+                self.assertFalse(MODULE.run_review(
+                    self.bundle, self.config, self.issue, self.clients, first))
+                next_month = datetime(2026, 11, 1, tzinfo=timezone.utc)
+                self.issue.created_at = next_month.isoformat()
+                self.assertFalse(MODULE.run_review(
+                    self.bundle, self.config, self.issue, self.clients, next_month))
+                for client in self.clients.values():
+                    client.review.assert_called_once()
+                reservations = [comment for comment in self.issue.comments
+                                if comment.startswith(MODULE.LEDGER_PREFIX)]
+                self.assertEqual(len(reservations), 1)
+
+    def test_prior_month_same_report_reservation_blocks_another_issue(self):
+        self.issue = FakeIssue([ledger(report_month="2026-10", month="2026-10")])
+        self.issue.own_comments = Mock(return_value=[])
+        next_month = datetime(2026, 11, 1, tzinfo=timezone.utc)
+        self.assertFalse(MODULE.run_review(
+            self.bundle, self.config, self.issue, self.clients, next_month))
+        for client in self.clients.values():
+            client.review.assert_not_called()
+
+    def test_reservation_history_scan_has_no_utc_month_cutoff(self):
+        env = {"GITHUB_REPOSITORY": MODULE.REPOSITORY, "ISSUE_NUMBER": "20",
+               "GITHUB_TOKEN": "fake"}
+        responses = [{"labels": [{"name": "monthly-review"}]},
+                     [ledger(report_month="2026-10", month="2026-10")], {}]
+        with patch.object(MODULE, "request_json", side_effect=responses) as request:
+            issue = MODULE.IssueComments(env)
+            with self.assertRaises(MODULE.ReviewUnavailable):
+                MODULE.reserve_budget(
+                    issue, self.config, "2026-10", datetime(2026, 11, 1, tzinfo=timezone.utc))
+        self.assertNotIn("since=", request.call_args_list[1].args[0])
+        self.assertEqual(request.call_count, 2)
 
     def test_bad_or_unreadable_ledger_fails_closed(self):
         for history in ([ledger(amount="NaN")], [ledger(amount="-1")]):
