@@ -12,6 +12,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class HookBindingTests(unittest.TestCase):
+    def test_workflow_keeps_binding_values_in_dynamic_secret_references(self):
+        workflow = (ROOT / ".github/workflows/monthly_publish.yml").read_text()
+        for value, selector in (("AI_SERVICE_URL", "AI_HOOK_URL_SECRET"),
+                                ("AI_SERVICE_AUDIENCE", "AI_HOOK_AUDIENCE_SECRET"),
+                                ("AI_SERVICE_PROFILE", "AI_HOOK_PROFILE_SECRET"),
+                                ("AI_SERVICE_MODEL", "AI_HOOK_MODEL_SECRET")):
+            self.assertIn(value + ": ${{ secrets[vars." + selector + "] }}", workflow)
+            self.assertNotIn(value + ": ${{ vars.", workflow)
+
     def test_one_shadow_target_and_only_environment_references(self):
         binding = json.loads((ROOT / "config/ai-hook-shadow.json").read_text())
         self.assertEqual(set(binding), {"schema", "service_target", "mode", "purpose", "environment"})
