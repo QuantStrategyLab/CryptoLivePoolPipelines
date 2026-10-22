@@ -284,6 +284,8 @@ jobs:
           path: data/output/monthly_report_bundle
       - name: Post single-turn OpenAI and Anthropic reviews to the existing issue
         env:
+          AI_SERVICE_TARGET: quant-ai-service-v2
+          AI_HOOK_MODE: shadow
           AI_SERVICE_URL: ${{ vars.AI_SERVICE_URL }}
           AI_SERVICE_AUDIENCE: ${{ vars.AI_SERVICE_AUDIENCE }}
           AI_SERVICE_PROFILE: ${{ vars.AI_SERVICE_PROFILE }}

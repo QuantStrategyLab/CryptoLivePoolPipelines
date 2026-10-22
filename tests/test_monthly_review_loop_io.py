@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock
 
 from scripts.check_monthly_review_deadman import missed_months, review_outcomes
-from scripts.monthly_review_loop import DotGateway, IssueState, apply_monthly_loop
+from scripts.monthly_review_loop import IssueState, apply_monthly_loop
 
 
 class FakeIssue:
@@ -30,16 +30,18 @@ class LoopIOTests(unittest.TestCase):
             second = IssueState(issue, archive=Path(tmp) / "b.json")
             self.assertEqual(second.load("frozen")["summary"], "untrusted --> text")
 
-    def test_monthly_pass_closes_and_creates_valid_verdict_artifact(self):
+    def test_monthly_pass_only_records_shadow_without_closing_issue(self):
         with tempfile.TemporaryDirectory() as tmp:
             issue = FakeIssue()
             path = Path(tmp) / "verdict.json"
             values = [(r, {"verdict": "approve", "severity": "none", "summary": "Evidence checked."})
                       for r in ("OpenAI", "Anthropic")]
             state = apply_monthly_loop(issue, values, identity="frozen", materials="evidence", archive=path, env={})
-            self.assertTrue(state["finished"])
-            self.assertEqual(json.loads(path.read_text())["disposition"], "auto_verified")
-            issue.auto_close.assert_called_once()
+            self.assertFalse(state["finished"])
+            self.assertEqual(json.loads(path.read_text())["disposition"], "shadow_recorded")
+            self.assertFalse(state["ai_submitted"])
+            issue.auto_close.assert_not_called()
+            self.assertEqual(issue.comments, [])
 
     def test_no_existing_dot_route_records_gap_without_notifying(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -48,20 +50,24 @@ class LoopIOTests(unittest.TestCase):
                       for r in ("OpenAI", "Anthropic")]
             result = apply_monthly_loop(issue, values, identity="frozen", materials="evidence",
                                         archive=Path(tmp) / "v.json", env={})
-            self.assertEqual(result["gap"], "approved_dot_route_unavailable")
+            self.assertEqual(result["binding_status"], "blocked_configuration")
             self.assertNotIn("@Pigbibi", json.dumps(issue.comments))
             issue.auto_close.assert_not_called()
 
-    def test_dot_receipt_must_match_request_owner_and_provider(self):
+    def test_configured_shadow_never_touches_injected_remote_or_issue(self):
         env = {"AI_SERVICE_URL": "https://gateway.example/mcp", "AI_SERVICE_AUDIENCE": "approved",
                "AI_SERVICE_PROFILE": "primary", "AI_SERVICE_MODEL": "configured-dot",
-               "GITHUB_REPOSITORY": "QuantStrategyLab/CryptoLivePoolPipelines"}
-        http = Mock(return_value={"id": "task", "request": {}, "provider": "other", "status": "completed"})
-        dot = DotGateway(env, http)
-        dot._token = Mock(return_value="fake")
-        with self.assertRaises(ValueError):
-            dot.result("task", {})
-        self.assertEqual(http.call_count, 1)
+               "AI_SERVICE_TARGET": "quant-ai-service-v2", "AI_HOOK_MODE": "shadow"}
+        class Forbidden:
+            def __getattribute__(self, name):
+                raise AssertionError("external capability accessed: " + name)
+        with tempfile.TemporaryDirectory() as tmp:
+            values = [(role, {"verdict": "flag", "severity": "risk_limit", "summary": "Concern."})
+                      for role in ("OpenAI", "Anthropic")]
+            result = apply_monthly_loop(Forbidden(), values, identity="frozen", materials="sensitive-marker",
+                                        archive=Path(tmp)/"verdict.json", env=env, dot=Forbidden())
+            self.assertEqual(result["binding_status"], "present_unverified")
+            self.assertNotIn("sensitive-marker", (Path(tmp)/"verdict.json").read_text())
 
     def test_monitor_counts_skipped_job_even_when_publish_workflow_succeeded(self):
         run = {"id": 1, "created_at": "2026-11-01T04:00:00Z", "head_branch": "main",

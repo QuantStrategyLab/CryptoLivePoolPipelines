@@ -59,6 +59,12 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
         (self.bundle / "ai_review_input.md").write_text("Published October upstream report", encoding="utf-8")
         (self.bundle / "strategy_metrics.json").write_text('{"snapshots": []}')
         self.config = MODULE.Config({})
+        binding = patch.dict(os.environ, {"AI_SERVICE_URL": "https://service.example/mcp",
+            "AI_SERVICE_AUDIENCE": "fixture-audience", "AI_SERVICE_PROFILE": "fixture-profile",
+            "AI_SERVICE_MODEL": "fixture-model", "AI_SERVICE_TARGET": "quant-ai-service-v2",
+            "AI_HOOK_MODE": "shadow"})
+        binding.start()
+        self.addCleanup(binding.stop)
         self.issue = FakeIssue()
         self.clients = {name: Mock(review=Mock(return_value=json.dumps({"verdict": "approve", "severity": "none", "summary": "Review finding"})))
                         for name in ("OpenAI", "Anthropic")}
@@ -231,6 +237,18 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
     def test_prior_utc_month_reservations_do_not_consume_current_budget(self):
         self.issue = FakeIssue([ledger(amount="99", month="2026-09")])
         self.assertTrue(self.run_review())
+        state = json.loads(Path("data/output/monthly_review_verdict.json").read_text())
+        self.assertEqual(state["disposition"], "shadow_recorded")
+        self.assertFalse(state["finished"])
+        self.assertFalse(state["ai_submitted"])
+
+    def test_missing_binding_is_recorded_but_not_reported_as_success(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(self.run_review())
+        state = json.loads(Path("data/output/monthly_review_verdict.json").read_text())
+        self.assertEqual(state["binding_status"], "blocked_configuration")
+        self.assertFalse(state["finished"])
+        self.assertFalse(state["ai_submitted"])
 
     def test_missing_materials_post_unavailable_without_calls(self):
         (self.bundle / "strategy_metrics.json").unlink()

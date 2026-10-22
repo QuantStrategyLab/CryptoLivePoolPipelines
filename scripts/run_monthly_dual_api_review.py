@@ -285,7 +285,8 @@ def run_review(bundle_dir, config, issue, clients, now=None):
         if previous and previous.get("reviews"):
             state = apply_monthly_loop(issue, list(previous["reviews"].items()), identity=identity,
                                        materials=materials, archive=archive)
-            return state.get("finished") is True
+            return state.get("finished") is True or (state.get("disposition") == "shadow_recorded"
+                                                      and state.get("binding_status") == "present_unverified")
         reserve_budget(issue, config, report_month, now or datetime.now(timezone.utc))
     except ReviewUnavailable as exc:
         unavailable(issue, str(exc))
@@ -315,7 +316,8 @@ def run_review(bundle_dir, config, issue, clients, now=None):
         return False
     try:
         state = apply_monthly_loop(issue, results, identity=identity, materials=materials, archive=archive)
-        return state.get("finished") is True
+        return state.get("finished") is True or (state.get("disposition") == "shadow_recorded"
+                                                  and state.get("binding_status") == "present_unverified")
     except Exception:
         unavailable(issue, "structured review or closed-loop state unavailable")
         return False
