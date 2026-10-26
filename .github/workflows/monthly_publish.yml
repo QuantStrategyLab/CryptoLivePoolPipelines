@@ -286,10 +286,10 @@ jobs:
         env:
           AI_SERVICE_TARGET: quant-ai-service-v2
           AI_HOOK_MODE: shadow
-          AI_SERVICE_URL: ${{ vars.AI_SERVICE_URL }}
-          AI_SERVICE_AUDIENCE: ${{ vars.AI_SERVICE_AUDIENCE }}
-          AI_SERVICE_PROFILE: ${{ vars.AI_SERVICE_PROFILE }}
-          AI_SERVICE_MODEL: ${{ vars.AI_SERVICE_MODEL }}
+          AI_SERVICE_URL: ${{ secrets[vars.AI_HOOK_URL_SECRET] }}
+          AI_SERVICE_AUDIENCE: ${{ secrets[vars.AI_HOOK_AUDIENCE_SECRET] }}
+          AI_SERVICE_PROFILE: ${{ secrets[vars.AI_HOOK_PROFILE_SECRET] }}
+          AI_SERVICE_MODEL: ${{ secrets[vars.AI_HOOK_MODEL_SECRET] }}
           REVIEW_OWNER_LOGIN: ${{ vars.REVIEW_OWNER_LOGIN || 'Pigbibi' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE_NUMBER: ${{ needs.monthly-publish.outputs.review_issue }}
