@@ -38,6 +38,8 @@ python -m unittest discover -s tests -v
 CI also verifies the clean-wheel package contract, which asserts the `src/`
 package layout. Keep module paths stable when moving files.
 
+Organization documentation rules are checked by `python scripts/check_style.py`, which also runs in CI as the `Documentation check` job.
+
 ## Naming and documentation
 
 - Developer documentation is English by default; Chinese siblings use
