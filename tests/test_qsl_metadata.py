@@ -18,5 +18,5 @@ def test_qsl_metadata_has_compat_bundle() -> None:
     compat = qsl["compat"]
     assert compat["bundle"] == "2026.09.1"
     
-    assert qsl.get("artifact_contract") == "docs/integration_contract.md"
-    assert qsl.get("snapshot_contract") == "docs/integration_contract.md"
+    assert qsl.get("artifact_contract") == "docs/integration-contract.md"
+    assert qsl.get("snapshot_contract") == "docs/integration-contract.md"
