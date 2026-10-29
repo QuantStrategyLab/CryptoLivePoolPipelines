@@ -8,8 +8,8 @@ enforce_bundle = false
 owner = "pipeline"
 expires_at = "2026-09-30"
 next_action = "replace runtime requirements compatibility and restore enforce_bundle=true"
-artifact_contract = "docs/integration_contract.md"
-snapshot_contract = "docs/integration_contract.md"
+artifact_contract = "docs/integration-contract.md"
+snapshot_contract = "docs/integration-contract.md"
 
 
 [qsl.compat]

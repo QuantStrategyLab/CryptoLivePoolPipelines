@@ -89,7 +89,7 @@ is 1 USD. Input is counted conservatively as UTF-8 byte lengths plus fixed
 message overhead, so oversized input is skipped rather than truncated. Missing
 `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` skips the API job and posts a
 `review unavailable` comment. See the
-[operator runbook](docs/operator_runbook.md#monthly-review-only-api-audit) for
+[operator runbook](docs/operator-runbook.md#monthly-review-only-api-audit) for
 the configuration and budget rules.
 
 Production publish targets such as the GCP project, GCS bucket, and Firestore

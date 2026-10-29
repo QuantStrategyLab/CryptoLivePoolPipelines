@@ -96,7 +96,7 @@ Interpretation:
 - validation is now methodologically stricter and more realistic than the legacy baseline
 - the default production path is intentionally frozen around Binance-only stability
 - current priority should remain monthly refresh discipline and stable contract publishing rather than further production-path experimentation
-- downstream consumers should validate the exported live-pool contract using the stable fields documented in `docs/integration_contract.md`
+- downstream consumers should validate the exported live-pool contract using the stable fields documented in `docs/integration-contract.md`
 
 Report locations for the hardened baseline:
 
