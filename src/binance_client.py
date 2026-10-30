@@ -184,6 +184,8 @@ class BinanceSpotClient:
         symbol: str,
         start_date: str | pd.Timestamp,
         end_date: Optional[str | pd.Timestamp] = None,
+        *,
+        received_at_fn=None,
     ) -> pd.DataFrame:
         """Fetch daily klines between two dates using Binance's paginated API."""
         start_ts = _utc_day_ms(start_date)
@@ -216,7 +218,7 @@ class BinanceSpotClient:
                         or (previous_open is not None and opened <= previous_open)):
                     raise ValueError("non-monotonic or out-of-range Binance daily kline page")
                 previous_open = opened
-            frame = self._normalize_kline_payload(symbol, payload, received_at=_utc_now())
+            frame = self._normalize_kline_payload(symbol, payload, received_at=(received_at_fn or _utc_now)())
             frames.append(frame)
             last_open_ms = int(payload[-1][0])
             next_start = last_open_ms + 24 * 60 * 60 * 1000
