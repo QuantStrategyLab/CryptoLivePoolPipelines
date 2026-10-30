@@ -27,6 +27,17 @@ FORMULA_VERSION = "btc-power-law-gma200/v1"
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class RejectedResponse(ValueError):
+    """Bounded public response retained only as failed collection evidence."""
+
+    def __init__(self, *, status, endpoint_matches, raw, received_at):
+        super().__init__("unexpected response endpoint or status")
+        self.status = status
+        self.endpoint_matches = endpoint_matches
+        self.raw = raw
+        self.received_at = received_at
+
+
 def _now():
     return pd.Timestamp.now(tz="UTC")
 
@@ -144,10 +155,9 @@ def _fetch(params):
     response = session.send(request, timeout=30, allow_redirects=False, **settings)
     try:
         parts = urlsplit(response.url)
-        if (response.status_code != 200 or parts.scheme != "https" or parts.netloc != "api.binance.com"
-                or parts.path != "/api/v3/klines" or parts.fragment
-                or parse_qs(parts.query) != {key: [str(value)] for key, value in params.items()}):
-            raise ValueError("unexpected response endpoint or status")
+        endpoint_matches = (parts.scheme == "https" and parts.netloc == "api.binance.com"
+                            and parts.path == "/api/v3/klines" and not parts.fragment
+                            and parse_qs(parts.query) == {key: [str(value)] for key, value in params.items()})
         chunks, size = [], 0
         for chunk in response.iter_content(chunk_size=65536):
             size += len(chunk)
@@ -155,7 +165,11 @@ def _fetch(params):
                 raise ValueError("response too large")
             chunks.append(chunk)
         raw = b"".join(chunks)
-        return raw, _now()
+        received = _now()
+        if response.status_code != 200 or not endpoint_matches:
+            raise RejectedResponse(status=response.status_code, endpoint_matches=bool(endpoint_matches),
+                                   raw=raw, received_at=received)
+        return raw, received
     finally:
         response.close()
         session.close()
@@ -173,7 +187,20 @@ def collect(output: Path):
     params = {"symbol": "BTCUSDT", "interval": "1d", "startTime": int(start.tz_localize("UTC").timestamp() * 1000),
               "endTime": int((end.tz_localize("UTC") + pd.Timedelta(days=1)).timestamp() * 1000) - 1,
               "limit": COUNT}
-    raw, received = _fetch(params)
+    try:
+        raw, received = _fetch(params)
+    except RejectedResponse as exc:
+        output.mkdir(parents=True, exist_ok=False)
+        (output / "rejected-response.bin").write_bytes(exc.raw)
+        failure = {"schema": "btc-cycle-collection-failure/v1", "status": "failed",
+                   "source_revision": revision, "lock_sha256": lock_hash, "dependencies": versions,
+                   "endpoint": ENDPOINT, "params": params, "http_status": exc.status,
+                   "endpoint_matches": exc.endpoint_matches, "started_at": started.isoformat(),
+                   "received_at": exc.received_at.isoformat(), "response_sha256": _hash(exc.raw),
+                   "source_authenticated": False, "clock_authenticated": False,
+                   "historical_pit_verified": False}
+        (output / "failure-manifest.json").write_bytes(_encode(failure))
+        raise
     ahr, replay_params, close_ms = _compute(raw, start=start, end=end, received=received)
     if replay_params != params:
         raise ValueError("request binding mismatch")

@@ -33,6 +33,7 @@ jobs:
           python scripts/btc_cycle_evidence.py collect --directory "$RUNNER_TEMP/btc-cycle-evidence"
           python scripts/btc_cycle_evidence.py verify --directory "$RUNNER_TEMP/btc-cycle-evidence" > "$RUNNER_TEMP/btc-cycle-evidence/verification-summary.json"
       - name: Retain evidence and verification summary
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: btc-cycle-evidence-${{ github.run_id }}
