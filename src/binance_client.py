@@ -27,6 +27,30 @@ BINANCE_KLINE_COLUMNS = [
 ]
 
 
+def _utc_now() -> pd.Timestamp:
+    return pd.Timestamp.now(tz="UTC")
+
+
+def _utc_day_ms(value: Any) -> int:
+    day = to_timestamp(value)
+    day = day.tz_localize("UTC") if day.tzinfo is None else day.tz_convert("UTC")
+    return int(day.timestamp() * 1000)
+
+
+def _valid_closed_tail(row: pd.Series) -> bool:
+    """Check stored timing evidence, without asserting provider authenticity."""
+    try:
+        values = [row[key] for key in ("open_time", "close_time", "received_at")]
+        if any(pd.isna(value) or isinstance(value, bool) or float(value) != int(value) for value in values):
+            return False
+        opened, closed, received = map(int, values)
+        day_ms = 86400000
+        expected = _utc_day_ms(row["date"])
+        return opened == expected and opened % day_ms == 0 and closed == opened + day_ms - 1 and received > closed
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return False
+
+
 @dataclass
 class BinanceClientConfig:
     base_url: str
@@ -108,8 +132,20 @@ class BinanceSpotClient:
             )
         return pd.DataFrame(rows)
 
-    def _normalize_kline_payload(self, symbol: str, payload: list[list[Any]]) -> pd.DataFrame:
+    def _normalize_kline_payload(self, symbol: str, payload: list[list[Any]], *, received_at: pd.Timestamp) -> pd.DataFrame:
         frame = pd.DataFrame(payload, columns=BINANCE_KLINE_COLUMNS)
+        for key in ("open_time", "close_time"):
+            values = pd.to_numeric(frame[key], errors="raise")
+            if values.isna().any() or (values % 1 != 0).any():
+                raise ValueError("invalid Binance daily kline timestamp")
+            frame[key] = values.astype("int64")
+        received_ms = int(received_at.timestamp() * 1000)
+        if ((frame["open_time"] % 86400000 != 0).any()
+                or (frame["close_time"] != frame["open_time"] + 86400000 - 1).any()
+                or (frame["open_time"] > received_ms).any()):
+            raise ValueError("invalid Binance daily kline boundaries")
+        frame = frame.loc[frame["close_time"] < received_ms].copy()
+        frame["received_at"] = received_ms
         frame["date"] = pd.to_datetime(frame["open_time"], unit="ms").dt.normalize()
         frame["symbol"] = symbol
         numeric_columns = [
@@ -128,6 +164,9 @@ class BinanceSpotClient:
         keep_columns = [
             "date",
             "symbol",
+            "open_time",
+            "close_time",
+            "received_at",
             "open",
             "high",
             "low",
@@ -147,13 +186,14 @@ class BinanceSpotClient:
         end_date: Optional[str | pd.Timestamp] = None,
     ) -> pd.DataFrame:
         """Fetch daily klines between two dates using Binance's paginated API."""
-        start_ts = int(to_timestamp(start_date).timestamp() * 1000)
+        start_ts = _utc_day_ms(start_date)
         end_ts = None
         if end_date is not None:
-            end_ts = int((to_timestamp(end_date) + pd.Timedelta(days=1)).timestamp() * 1000)
+            end_ts = _utc_day_ms(end_date) + 86400000 - 1
 
         frames: list[pd.DataFrame] = []
         current_start = start_ts
+        previous_open = None
         while True:
             params = {
                 "symbol": symbol,
@@ -168,7 +208,15 @@ class BinanceSpotClient:
             if not payload:
                 break
 
-            frame = self._normalize_kline_payload(symbol, payload)
+            for row in payload:
+                if not isinstance(row, (list, tuple)) or not row or type(row[0]) is not int:
+                    raise ValueError("invalid Binance daily kline page")
+                opened = row[0]
+                if (opened < current_start or (end_ts is not None and opened > end_ts)
+                        or (previous_open is not None and opened <= previous_open)):
+                    raise ValueError("non-monotonic or out-of-range Binance daily kline page")
+                previous_open = opened
+            frame = self._normalize_kline_payload(symbol, payload, received_at=_utc_now())
             frames.append(frame)
             last_open_ms = int(payload[-1][0])
             next_start = last_open_ms + 24 * 60 * 60 * 1000
@@ -182,6 +230,9 @@ class BinanceSpotClient:
                 columns=[
                     "date",
                     "symbol",
+                    "open_time",
+                    "close_time",
+                    "received_at",
                     "open",
                     "high",
                     "low",
@@ -210,13 +261,19 @@ class BinanceSpotClient:
             if not existing.empty:
                 existing["date"] = pd.to_datetime(existing["date"]).dt.normalize()
                 last_date = existing["date"].max()
-                fetch_start = max(fetch_start, last_date + pd.Timedelta(days=1))
+                # Refetch the final day: older versions may have persisted an open bar.
+                fetch_start = max(fetch_start, last_date)
 
         if end_date is not None and fetch_start > to_timestamp(end_date):
             self.logger.info("Skipping %s because local history is already current.", symbol)
             return existing if existing is not None else pd.DataFrame()
 
         downloaded = self.get_klines(symbol=symbol, start_date=fetch_start, end_date=end_date)
+        if existing is not None and not existing.empty:
+            tail = existing.loc[existing["date"] == existing["date"].max()].iloc[-1]
+            replaced = not downloaded.empty and (downloaded["date"] == tail["date"]).any()
+            if not replaced and not _valid_closed_tail(tail):
+                self.logger.warning("Unverified last daily bar has no closed replacement: %s", symbol)
         if downloaded.empty and existing is not None:
             combined = existing.copy()
         elif existing is not None and not existing.empty:

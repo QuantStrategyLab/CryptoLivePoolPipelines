@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 
 from .backtest import run_backtest_suite, run_walkforward_scoring
+from .binance_client import _valid_closed_tail
 from .evaluation import evaluate_leader_selection, leader_metrics_to_frame
 from .external_data import load_optional_market_cap_metadata, merge_histories_with_external
 from .export import (
@@ -340,7 +341,9 @@ def run_research_pipeline(config: dict[str, Any], universe_mode: Optional[str] =
     }
 
 
-def _export_btc_cycle_from_history(btc_file: Path, output_dir: Path, as_of_date: pd.Timestamp) -> dict[str, Any]:
+def _export_btc_cycle_from_history(
+    btc_file: Path, output_dir: Path, as_of_date: pd.Timestamp, *, available_by: pd.Timestamp | None = None
+) -> dict[str, Any]:
     """Read named close values and export the cycle indicators for this cutoff."""
     history = pd.read_csv(btc_file)
     if not {"date", "symbol", "close"}.issubset(history.columns):
@@ -357,6 +360,19 @@ def _export_btc_cycle_from_history(btc_file: Path, output_dir: Path, as_of_date:
     selected_dates = dates.loc[history.index].dt.tz_localize(None)
     if history.empty or not history["symbol"].eq("BTCUSDT").all():
         raise ValueError("BTC history has no selected rows or an invalid symbol")
+    if available_by is not None:
+        available_cutoff = pd.Timestamp(available_by)
+        if pd.isna(available_cutoff) or available_cutoff.tzinfo is None or available_cutoff.utcoffset() != pd.Timedelta(0):
+            raise ValueError("available_by must be an explicit UTC timestamp")
+        cutoff_ms = int(available_cutoff.timestamp() * 1000)
+        if not {"open_time", "close_time", "received_at"}.issubset(history.columns):
+            raise ValueError("BTC history timing evidence unavailable")
+        ordered_dates = pd.DatetimeIndex(selected_dates).sort_values()
+        if len(ordered_dates) > 1 and not ((ordered_dates[1:] - ordered_dates[:-1]) == pd.Timedelta(days=1)).all():
+            raise ValueError("BTC history must contain continuous daily bars")
+        for _, row in history.iterrows():
+            if not _valid_closed_tail(row) or int(row["received_at"]) > cutoff_ms:
+                raise ValueError("BTC history timing evidence unavailable")
     try:
         btc_close = pd.Series(pd.to_numeric(history["close"], errors="raise").to_numpy(),
                               index=pd.DatetimeIndex(selected_dates)).sort_index()
@@ -374,6 +390,8 @@ def build_live_pool_outputs(
     config: dict[str, Any],
     as_of_date: Optional[pd.Timestamp] = None,
     universe_mode: Optional[str] = None,
+    *,
+    btc_available_by: Optional[pd.Timestamp] = None,
 ) -> dict[str, Any]:
     """Train on the latest eligible history and export live universe/ranking files."""
     if config["export"].get("save_legacy_live_pool", True) is False:
@@ -470,7 +488,7 @@ def build_live_pool_outputs(
     btc_file = Path(config["paths"].raw_dir) / "BTCUSDT.csv"
     if btc_file.exists():
         try:
-            btc_cycle = _export_btc_cycle_from_history(btc_file, output_dir, latest_date)
+            btc_cycle = _export_btc_cycle_from_history(btc_file, output_dir, latest_date, available_by=btc_available_by)
             logger.info("BTC cycle indicators exported: AHR999=%s Mayer=%s",
                          btc_cycle.get("ahr999", float("nan")),
                          btc_cycle.get("mayer_multiple", float("nan")))

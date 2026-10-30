@@ -63,6 +63,60 @@ class BtcCycleExportTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     _export_btc_cycle_from_history(root / "BTCUSDT.csv", root, pd.Timestamp("2026-01-01"))
 
+    def test_strict_cutoff_checks_recorded_receipt_time(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            times = self.dates.tz_localize("UTC").as_unit("ns").asi8 // 1000000
+            history = pd.DataFrame({"date": self.dates, "symbol": "BTCUSDT", "close": self.close.to_numpy(),
+                                    "open_time": times, "close_time": times + 86400000 - 1,
+                                    "received_at": times + 86400000 + 1000})
+            path = root / "BTCUSDT.csv"
+            history.to_csv(path, index=False)
+            cutoff = self.dates[-1].tz_localize("UTC") + pd.Timedelta(days=1, seconds=2)
+            out = _export_btc_cycle_from_history(path, root, self.dates[-1], available_by=cutoff)
+            self.assertEqual(out["close"], self.close.iloc[-1])
+            with self.assertRaisesRegex(ValueError, "timing"):
+                _export_btc_cycle_from_history(path, root, self.dates[-1], available_by=cutoff - pd.Timedelta(seconds=2))
+            history.loc[0, "received_at"] = None
+            history.to_csv(path, index=False)
+            with self.assertRaisesRegex(ValueError, "timing"):
+                _export_btc_cycle_from_history(path, root, self.dates[-1], available_by=cutoff)
+            with self.assertRaisesRegex(ValueError, "UTC"):
+                _export_btc_cycle_from_history(path, root, self.dates[-1], available_by=pd.Timestamp("2026-01-01"))
+
+    def test_strict_rejects_missing_daily_bar(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dates = self.dates.delete(100)
+            times = dates.tz_localize("UTC").as_unit("ns").asi8 // 1000000
+            pd.DataFrame({"date": dates, "symbol": "BTCUSDT", "close": 100.0,
+                          "open_time": times, "close_time": times + 86400000 - 1,
+                          "received_at": times + 86400000 + 1000}).to_csv(root / "BTCUSDT.csv", index=False)
+            with self.assertRaisesRegex(ValueError, "continuous"):
+                _export_btc_cycle_from_history(root / "BTCUSDT.csv", root, self.dates[-1],
+                                               available_by=pd.Timestamp("2026-01-01T00:00:00Z"))
+
+    def test_strict_accepts_continuous_dates_at_microsecond_and_nanosecond_precision(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            times = self.dates.tz_localize("UTC").as_unit("ns").asi8 // 1000000
+            history = pd.DataFrame({"date": self.dates, "symbol": "BTCUSDT", "close": self.close.to_numpy(),
+                                    "open_time": times, "close_time": times + 86400000 - 1,
+                                    "received_at": times + 86400000 + 1000})
+            path = root / "BTCUSDT.csv"
+            history.to_csv(path, index=False)
+            parse_dates = pd.to_datetime
+            for unit in ("us", "ns"):
+                def with_precision(*args, **kwargs):
+                    result = parse_dates(*args, **kwargs)
+                    if isinstance(result, pd.Series):
+                        return result.dt.as_unit(unit)
+                    return result
+                with self.subTest(unit=unit), patch("src.pipeline.pd.to_datetime", side_effect=with_precision):
+                    out = _export_btc_cycle_from_history(path, root, self.dates[-1],
+                        available_by=self.dates[-1].tz_localize("UTC") + pd.Timedelta(days=1, seconds=2))
+                    self.assertEqual(out["close"], self.close.iloc[-1])
+
     def test_non_btc_benchmark_build_never_uses_its_history_as_btc(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
