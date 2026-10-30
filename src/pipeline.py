@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
+import numpy as np
 
 from .backtest import run_backtest_suite, run_walkforward_scoring
 from .evaluation import evaluate_leader_selection, leader_metrics_to_frame
@@ -339,6 +340,36 @@ def run_research_pipeline(config: dict[str, Any], universe_mode: Optional[str] =
     }
 
 
+def _export_btc_cycle_from_history(btc_file: Path, output_dir: Path, as_of_date: pd.Timestamp) -> dict[str, Any]:
+    """Read named close values and export the cycle indicators for this cutoff."""
+    history = pd.read_csv(btc_file)
+    if not {"date", "symbol", "close"}.issubset(history.columns):
+        raise ValueError("BTC history is missing a required date, symbol, or close column")
+    try:
+        dates = pd.to_datetime(history["date"], errors="raise", format="mixed", utc=True)
+        cutoff = pd.Timestamp(as_of_date)
+        cutoff = cutoff.tz_localize("UTC") if cutoff.tzinfo is None else cutoff.tz_convert("UTC")
+        if dates.isna().any() or pd.isna(cutoff):
+            raise ValueError("missing date")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("BTC history has invalid dates") from exc
+    history = history.loc[dates <= cutoff].copy()
+    selected_dates = dates.loc[history.index].dt.tz_localize(None)
+    if history.empty or not history["symbol"].eq("BTCUSDT").all():
+        raise ValueError("BTC history has no selected rows or an invalid symbol")
+    try:
+        btc_close = pd.Series(pd.to_numeric(history["close"], errors="raise").to_numpy(),
+                              index=pd.DatetimeIndex(selected_dates)).sort_index()
+    except (TypeError, ValueError) as exc:
+        raise ValueError("BTC history has invalid close values") from exc
+    if (btc_close.empty or btc_close.index.has_duplicates or btc_close.isna().any()
+            or not np.isfinite(btc_close).all() or (btc_close <= 0).any()):
+        raise ValueError("BTC history has invalid close values or duplicate dates")
+    indicators = compute_btc_cycle_indicators(btc_close, as_of_date=cutoff.tz_localize(None))
+    export_btc_cycle_indicators(indicators, output_dir)
+    return indicators
+
+
 def build_live_pool_outputs(
     config: dict[str, Any],
     as_of_date: Optional[pd.Timestamp] = None,
@@ -436,17 +467,11 @@ def build_live_pool_outputs(
 
     # Compute and export BTC cycle indicators for crypto DCA strategies
     btc_cycle = {}
-    benchmark_symbol = str(config.get("data", {}).get("benchmark_symbol", "BTCUSDT"))
-    btc_file = Path(config["paths"].raw_dir) / f"{benchmark_symbol}.csv"
+    btc_file = Path(config["paths"].raw_dir) / "BTCUSDT.csv"
     if btc_file.exists():
         try:
-            btc_close = pd.read_csv(btc_file, index_col=0, parse_dates=True).squeeze("columns")
-            if isinstance(btc_close, pd.DataFrame):
-                btc_close = btc_close.iloc[:, 0]
-            btc_close = btc_close.sort_index()
-            btc_cycle = compute_btc_cycle_indicators(btc_close, as_of_date=latest_date)
-            export_btc_cycle_indicators(btc_cycle, output_dir)
-            logger.info("BTC cycle indicators exported: AHR999=%.3f Mayer=%.3f",
+            btc_cycle = _export_btc_cycle_from_history(btc_file, output_dir, latest_date)
+            logger.info("BTC cycle indicators exported: AHR999=%s Mayer=%s",
                          btc_cycle.get("ahr999", float("nan")),
                          btc_cycle.get("mayer_multiple", float("nan")))
         except Exception as exc:

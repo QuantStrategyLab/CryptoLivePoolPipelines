@@ -323,3 +323,32 @@ Preferred rollback:
 3. update the Firestore summary document so `version`, `as_of_date`, and URIs point to that release
 
 The downstream consumer contract does not need to change during rollback.
+
+## BTC cycle indicator boundaries
+
+On 2026-10-30, the pool release contract was clarified for consumers: the
+optional cycle file is not published by the pool release publisher and must not
+be inferred from the pool's other published artifacts.
+
+The optional `btc_cycle_indicators.json` is calculated from the named `close`
+column of local BTCUSDT history at or before the requested date. It is not a
+`btc-cycle-input/v1` envelope and does not attest a source, producer, actual
+observation time, or availability time. CSV dates alone do not establish that
+the selected Binance bar was closed or that the history is point-in-time
+complete. The existing incremental downloader can retain the last downloaded
+day without refreshing it. Do not infer a real availability time from a date.
+
+The exported field `mvrv_zscore` is a price-derived proxy: it standardizes the
+Mayer Multiple against its rolling mean and standard deviation. It is not an
+on-chain MVRV Z-Score. Its suitability for any strategy or exit policy requires
+separate approval; this label does not establish equivalence.
+
+The cycle artifact is optional and local to the build. A failed or skipped
+generation can leave a file from an earlier build in a reused output directory.
+Use an isolated output directory for each build. The pool release publisher
+does not publish this file: its identity, closed-bar evidence, availability,
+and binding to a specific build remain unresolved. Adding publication requires
+a separately reviewed contract. This does not remove or invalidate any object
+already present in remote storage. This source change neither establishes a
+live data connection nor authorizes production trading.
+

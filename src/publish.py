@@ -28,10 +28,6 @@ REQUIRED_OUTPUT_FILES = (
     "artifact_manifest.json",
 )
 
-OPTIONAL_OUTPUT_FILES = (
-    "btc_cycle_indicators.json",
-)
-
 LIVE_POOL_LEGACY_EXACT_BYTES_CONTRACT_VERSION = (
     "qsl.crypto_live_pool_legacy_exact_bytes.v1"
 )
@@ -486,11 +482,6 @@ def upload_release_artifacts(
         "model_run_manifest.json": artifacts.model_run_manifest_path,
         "artifact_manifest.json": artifacts.artifact_manifest_path,
     }
-    # Include optional files if present
-    for opt_file in OPTIONAL_OUTPUT_FILES:
-        opt_path = artifacts.output_dir / opt_file
-        if opt_path.exists():
-            files[opt_file] = opt_path
     for filename, local_path in files.items():
         object_info = storage_layout["objects"][filename]
         upload_bytes = (
