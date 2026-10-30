@@ -99,6 +99,11 @@ def compute_btc_cycle_indicators(
     Returns a dict suitable for export as btc_cycle_indicators.json,
     compatible with the derived_indicators contract expected by crypto_btc_dca.
     """
+    if as_of_date is not None:
+        btc_close = btc_close.loc[btc_close.index <= pd.Timestamp(as_of_date)]
+    if btc_close.empty:
+        raise ValueError("no BTC price history on or before as_of_date")
+
     sma200 = sma(btc_close, 200)
     gma200 = gma(btc_close, 200)
     ahr999 = ahr999_index(btc_close, sma200=sma200)
@@ -109,8 +114,6 @@ def compute_btc_cycle_indicators(
         as_of_date = btc_close.index[-1]
 
     latest_idx = btc_close.index.get_indexer([as_of_date], method="pad")[0]
-    if latest_idx < 0:
-        latest_idx = len(btc_close) - 1
     latest_ts = btc_close.index[latest_idx]
 
     estimate_price = btc_power_law_estimate_price(latest_ts)
