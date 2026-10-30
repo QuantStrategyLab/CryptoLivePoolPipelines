@@ -335,8 +335,39 @@ column of local BTCUSDT history at or before the requested date. It is not a
 `btc-cycle-input/v1` envelope and does not attest a source, producer, actual
 observation time, or availability time. CSV dates alone do not establish that
 the selected Binance bar was closed or that the history is point-in-time
-complete. The existing incremental downloader can retain the last downloaded
-day without refreshing it. Do not infer a real availability time from a date.
+complete. Older history files may retain an unclosed last day. Do not infer a
+real availability time from a date.
+
+On 2026-10-30, daily history collection was changed to refetch its last stored
+day, retain exchange-provided `open_time` and `close_time` in milliseconds, and
+store `received_at` as the local UTC clock time immediately after each response.
+Rows from the current response are saved only when the declared daily close
+precedes that receipt time. The local clock and provider response are not
+independently authenticated. An empty or failed refresh retains existing rows;
+an older unverified last row can therefore remain, with a warning when observed.
+Existing CSVs remain readable, and older rows without these columns are not
+backfilled with invented evidence. Each response page must stay within the
+requested time bounds and be strictly increasing across pages; invalid pages
+abort the update before the history file is written.
+
+The BTC export reader accepts optional `available_by` (or the build function's
+`btc_available_by`) as a separate explicit UTC cutoff. When supplied it rejects
+selected rows with missing days, invalid exchange boundary timestamps or without
+a locally recorded receipt by that cutoff. This BTC-only continuity test does
+not establish source authenticity; the general downloader does not impose it
+on other assets with legitimately sparse histories. `as_of_date` still chooses historical bar dates; a
+later receipt of an old bar cannot prove it was available at the earlier date.
+Refetching a bar replaces its local row and receipt time, so earlier receipt
+evidence cannot be replayed from this mutable CSV alone.
+This check concerns the selected local file only and does not prove source
+authenticity, clock accuracy, completeness, historical revisions or full PIT.
+The existing build call does not pass this optional cutoff; its cycle output
+therefore remains unverified and is not a strict authenticated input. The six
+standard pool artifacts and their publication contract are unchanged.
+When strict validation fails, the build logs the optional export failure and
+returns no cycle result; a file from an older build may still exist. A consumer
+must use the returned result or a freshly isolated output directory, and must
+not treat that old file as the result of the failed build.
 
 The exported field `mvrv_zscore` is a price-derived proxy: it standardizes the
 Mayer Multiple against its rolling mean and standard deviation. It is not an
