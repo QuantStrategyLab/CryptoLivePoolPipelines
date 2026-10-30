@@ -394,6 +394,12 @@ explicit local command is `python scripts/btc_cycle_evidence.py collect
 verification of an existing directory. The workflow retains the response body,
 seven-field `btc-cycle-input/v1` envelope, manifest and verification summary as
 a seven-day Actions artifact, not as a trading input or pool publication.
+When the endpoint or HTTP status is rejected, the bounded response body and a
+separate failure manifest are retained by the same workflow. The manifest
+records the HTTP status, whether the fixed endpoint matched, local receipt time
+and response hash without retaining response headers or an untrusted URL.
+Collection still fails and produces no cycle envelope; failure evidence cannot
+be replayed or consumed as a successful market input.
 
 The envelope's `observed_at` is the last bar's exchange-declared close time;
 `available_at` is the local completion time of the calculation. The manifest

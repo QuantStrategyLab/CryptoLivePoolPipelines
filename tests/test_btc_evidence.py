@@ -110,6 +110,24 @@ class EvidenceTests(unittest.TestCase):
                 evidence._compute(json.dumps(bad).encode(), start=pd.Timestamp("2026-03-24"),
                                   end=pd.Timestamp("2026-10-29"), received=self.now)
 
+    def test_rejected_response_retains_failure_without_cycle_input(self):
+        raw = b'{"msg":"restricted location"}'
+        rejected = evidence.RejectedResponse(status=451, endpoint_matches=True, raw=raw, received_at=self.now)
+        with patch.object(evidence, "_now", return_value=self.now), patch.object(
+            evidence, "_fetch", side_effect=rejected
+        ), self.assertRaises(evidence.RejectedResponse):
+            evidence.collect(self.directory)
+        self.assertEqual((self.directory / "rejected-response.bin").read_bytes(), raw)
+        failure = json.loads((self.directory / "failure-manifest.json").read_bytes())
+        self.assertEqual(failure["http_status"], 451)
+        self.assertTrue(failure["endpoint_matches"])
+        self.assertEqual(failure["response_sha256"], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(failure["source_revision"], "a" * 40)
+        self.assertEqual(failure["status"], "failed")
+        self.assertFalse((self.directory / "btc-cycle-input.json").exists())
+        with self.assertRaises(FileNotFoundError):
+            evidence.verify(self.directory, decision_at=self.now)
+
     def test_http_rejects_redirect_oversize_and_disabled_tls(self):
         params = {"symbol": "BTCUSDT", "interval": "1d", "startTime": 1, "endTime": 2, "limit": 220}
         class Request:
@@ -125,7 +143,7 @@ class EvidenceTests(unittest.TestCase):
                 yield self.raw
             def close(self):
                 pass
-        for status, size, tls in ((302, 1, True), (200, evidence.MAX_BODY + 1, True), (200, 1, False)):
+        for status, size, tls in ((302, 1, True), (451, 1, True), (200, evidence.MAX_BODY + 1, True), (200, 1, False)):
             with self.subTest(status=status, size=size, tls=tls):
                 class Session:
                     def merge_environment_settings(self, url, proxies, stream, verify, cert):
@@ -135,8 +153,13 @@ class EvidenceTests(unittest.TestCase):
                     def close(self):
                         pass
                 fake = types.SimpleNamespace(Request=Request, Session=Session)
-                with patch.dict("sys.modules", {"requests": fake}), self.assertRaises(ValueError):
+                with patch.dict("sys.modules", {"requests": fake}), self.assertRaises(ValueError) as caught:
                     evidence._fetch(params)
+                if status != 200:
+                    self.assertIsInstance(caught.exception, evidence.RejectedResponse)
+                    self.assertEqual(caught.exception.status, status)
+                    self.assertTrue(caught.exception.endpoint_matches)
+                    self.assertEqual(caught.exception.raw, b"x" * size)
 
 
 class SourceBindingTests(unittest.TestCase):
