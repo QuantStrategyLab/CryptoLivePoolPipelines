@@ -383,3 +383,35 @@ a separately reviewed contract. This does not remove or invalidate any object
 already present in remote storage. This source change neither establishes a
 live data connection nor authorizes production trading.
 
+### Manual BTC evidence
+
+The manually dispatched BTC evidence workflow uses a clean, exact `main`
+checkout and downloads at most one bounded response containing 220 closed
+BTCUSDT daily bars from the public Binance Spot endpoint. It has no account
+credentials or scheduled trigger and does not publish a pool release. The
+explicit local command is `python scripts/btc_cycle_evidence.py collect
+--directory <new-directory>`; without `collect`, the command runs offline
+verification of an existing directory. The workflow retains the response body,
+seven-field `btc-cycle-input/v1` envelope, manifest and verification summary as
+a seven-day Actions artifact, not as a trading input or pool publication.
+
+The envelope's `observed_at` is the last bar's exchange-declared close time;
+`available_at` is the local completion time of the calculation. The manifest
+separately records the response receipt and a local readback after the page and
+envelope were written. A decision clock must be at or after that readback. The
+available timestamp does not establish delivery to any consumer. The verifier
+replays the retained response bytes through daily-bar and BTC strict checks,
+requires the latest closed UTC day and 220 consecutive days, recalculates AHR,
+and compares the result and source/lock/version bindings. It refuses stale,
+future, malformed, modified or incomplete evidence. Its maximum age is 172,800
+seconds; a consumer with a smaller configured maximum age must separately
+enforce that stricter limit at its actual decision time.
+
+The manifest is produced by the same process and its hashes establish local
+consistency only: the source identity, TLS endpoint, clock, and retained bytes
+are not independently attested. A response collected today does not prove that
+the historical values were available at their historical dates. The workflow
+does not authenticate source or clock, validate a deployment, connect an
+account, or authorize trading. The separately named `mvrv_zscore` remains a
+price proxy and is not part of the seven-field envelope.
+

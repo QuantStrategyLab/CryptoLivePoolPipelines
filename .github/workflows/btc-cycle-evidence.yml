@@ -1,0 +1,41 @@
+name: Manual BTC cycle evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact dispatch commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Install locked dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements-lock.txt
+          python -m pip check
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Collect public BTC daily evidence and replay offline
+        run: |
+          set -euo pipefail
+          python scripts/btc_cycle_evidence.py collect --directory "$RUNNER_TEMP/btc-cycle-evidence"
+          python scripts/btc_cycle_evidence.py verify --directory "$RUNNER_TEMP/btc-cycle-evidence" > "$RUNNER_TEMP/btc-cycle-evidence/verification-summary.json"
+      - name: Retain evidence and verification summary
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: btc-cycle-evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/btc-cycle-evidence
+          if-no-files-found: error
+          retention-days: 7
