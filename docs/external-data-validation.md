@@ -142,7 +142,7 @@ Cautious holdout symbols:
 
 Rejected symbols:
 
-- none in this round
+- None.
 
 Representative pre-Binance extension results:
 
