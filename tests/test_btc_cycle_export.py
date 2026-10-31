@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import types
 import unittest
@@ -137,6 +138,100 @@ class BtcCycleExportTests(unittest.TestCase):
                 result = build_live_pool_outputs(config)
             self.assertEqual(result["btc_cycle_indicators"], {})
             self.assertFalse((root / "btc_cycle_indicators.json").exists())
+
+    def test_build_retires_previous_cycle_before_early_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = root / "btc_cycle_indicators.json"
+            current.write_bytes(b"old successful bytes")
+            config = {"paths": types.SimpleNamespace(output_dir=root), "export": {}}
+            with patch("src.pipeline.resolve_clean_source_revision", side_effect=RuntimeError("build failed")):
+                with self.assertRaisesRegex(RuntimeError, "build failed"):
+                    build_live_pool_outputs(config)
+            self.assertFalse(current.exists())
+            archived = list((root / "btc-cycle-history").glob("*/btc_cycle_indicators.json"))
+            self.assertEqual(len(archived), 1)
+            self.assertEqual(archived[0].read_bytes(), b"old successful bytes")
+
+    def test_retirement_runs_before_real_clean_source_check(self):
+        for tracked in (False, True):
+            with self.subTest(tracked=tracked), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                output = root / "data" / "output"
+                output.mkdir(parents=True)
+                current = output / "btc_cycle_indicators.json"
+                current.write_bytes(b"previous cycle")
+                (root / ".gitignore").write_text("data/output/*\n!data/output/.gitkeep\n")
+                subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+                subprocess.run(["git", "add", ".gitignore"], cwd=root, check=True)
+                if tracked:
+                    subprocess.run(["git", "add", "-f", str(current.relative_to(root))], cwd=root, check=True)
+                subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                                "commit", "-qm", "fixture"], cwd=root, check=True)
+                config = {"paths": types.SimpleNamespace(output_dir=output), "export": {}}
+                # Use the production resolver unchanged, bound to this temporary repository.
+                with patch("src.export.__file__", str(root / "src" / "export.py")), patch(
+                    "src.pipeline.resolve_universe_mode", side_effect=LookupError("past clean check")
+                ) as next_step:
+                    if tracked:
+                        with self.assertRaisesRegex(RuntimeError, "clean producer commit"):
+                            build_live_pool_outputs(config)
+                        next_step.assert_not_called()
+                    else:
+                        with self.assertRaisesRegex(LookupError, "past clean check"):
+                            build_live_pool_outputs(config)
+                        next_step.assert_called_once()
+                self.assertFalse(current.exists())
+                archived = list((output / "btc-cycle-history").glob("*/btc_cycle_indicators.json"))
+                self.assertEqual([path.read_bytes() for path in archived], [b"previous cycle"])
+
+    def test_retirement_failure_aborts_without_deleting_previous_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            current = root / "btc_cycle_indicators.json"
+            current.write_bytes(b"old successful bytes")
+            config = {"paths": types.SimpleNamespace(output_dir=root), "export": {}}
+            with patch.object(Path, "replace", side_effect=OSError("archive failed")), patch(
+                "src.pipeline.resolve_clean_source_revision"
+            ) as resolve:
+                with self.assertRaisesRegex(OSError, "archive failed"):
+                    build_live_pool_outputs(config)
+            resolve.assert_not_called()
+            self.assertEqual(current.read_bytes(), b"old successful bytes")
+
+    def test_current_cycle_file_tracks_this_build_outcome(self):
+        for outcome in ("missing", "failed", "success"):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                current = root / "btc_cycle_indicators.json"
+                current.write_bytes(b"old successful bytes")
+                if outcome != "missing":
+                    (root / "BTCUSDT.csv").write_text("synthetic")
+                panel = pd.DataFrame({"in_universe": [True], "blended_target": [1]}, index=pd.MultiIndex.from_tuples(
+                    [(pd.Timestamp("2026-01-01"), "BTCUSDT")], names=["date", "symbol"]))
+                model = types.SimpleNamespace(predictions=pd.DataFrame(), model_run_manifest={}, linear_backend="test", ml_backend="test")
+                snapshot = pd.DataFrame({"selected_flag": [True], "in_universe": [True]})
+                config = {"paths": types.SimpleNamespace(raw_dir=root, output_dir=root),
+                          "export": {"save_legacy_live_pool": True, "live_pool_size": 1},
+                          "labels": {"horizons": [1]}, "walkforward": {"train_window_days": 1}}
+                def export(*args, **kwargs):
+                    (Path(args[1]) / current.name).write_text("partial" if outcome == "failed" else "new result")
+                    if outcome == "failed":
+                        raise ValueError("invalid BTC data")
+                    return {"ahr999": 2.0}
+                with patch.multiple("src.pipeline", resolve_clean_source_revision=lambda: "a" * 40,
+                    resolve_universe_mode=lambda *a, **k: ("test", {}), prepare_research_panel=lambda *a, **k: (panel, {}),
+                    fit_predict_models=lambda *a, **k: model, build_final_scores=lambda p, c: p,
+                    export_latest_universe=lambda *a, **k: None, export_latest_ranking=lambda *a, **k: None,
+                    latest_ranking_snapshot=lambda *a, **k: snapshot, export_live_pool=lambda **k: {},
+                    export_strategy_artifact_manifest=lambda **k: {}, _export_btc_cycle_from_history=export):
+                    result = build_live_pool_outputs(config)
+                archived = list((root / "btc-cycle-history").glob("*/btc_cycle_indicators.json"))
+                self.assertEqual([p.read_bytes() for p in archived], [b"old successful bytes"])
+                self.assertEqual(bool(result["btc_cycle_indicators"]), outcome == "success")
+                self.assertEqual(current.exists(), outcome == "success")
+                if outcome == "success":
+                    self.assertEqual(current.read_text(), "new result")
 
     def test_future_rows_do_not_change_any_cutoff_metric(self):
         baseline = compute_btc_cycle_indicators(self.close, as_of_date=self.dates[-1])

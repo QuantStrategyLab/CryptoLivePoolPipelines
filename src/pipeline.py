@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tempfile
 from typing import Any, Optional
 
 import pandas as pd
@@ -394,6 +395,16 @@ def build_live_pool_outputs(
     btc_available_by: Optional[pd.Timestamp] = None,
 ) -> dict[str, Any]:
     """Train on the latest eligible history and export live universe/ranking files."""
+    # Preserve the previous bytes before this build can fail or skip BTC.
+    paths = config["paths"]
+    output_dir = Path(paths["output_dir"] if isinstance(paths, dict) else paths.output_dir)
+    cycle_path = output_dir / "btc_cycle_indicators.json"
+    if cycle_path.exists():
+        history_dir = output_dir / "btc-cycle-history"
+        history_dir.mkdir(parents=True, exist_ok=True)
+        archive_dir = Path(tempfile.mkdtemp(dir=history_dir))
+        cycle_path.replace(archive_dir / cycle_path.name)
+
     if config["export"].get("save_legacy_live_pool", True) is False:
         raise ValueError(
             "export.save_legacy_live_pool=false is incompatible with the required "
@@ -488,12 +499,18 @@ def build_live_pool_outputs(
     btc_file = Path(config["paths"].raw_dir) / "BTCUSDT.csv"
     if btc_file.exists():
         try:
-            btc_cycle = _export_btc_cycle_from_history(btc_file, output_dir, latest_date, available_by=btc_available_by)
-            logger.info("BTC cycle indicators exported: AHR999=%s Mayer=%s",
-                         btc_cycle.get("ahr999", float("nan")),
-                         btc_cycle.get("mayer_multiple", float("nan")))
+            with tempfile.TemporaryDirectory(dir=output_dir) as tmp:
+                stage = Path(tmp)
+                btc_cycle = _export_btc_cycle_from_history(btc_file, stage, latest_date, available_by=btc_available_by)
+                (stage / cycle_path.name).replace(cycle_path)
         except Exception as exc:
+            cycle_path.unlink(missing_ok=True)
+            btc_cycle = {}
             logger.warning("BTC cycle indicators unavailable: %s", exc)
+        else:
+            logger.info("BTC cycle indicators exported: AHR999=%s Mayer=%s",
+                        btc_cycle.get("ahr999", float("nan")),
+                        btc_cycle.get("mayer_multiple", float("nan")))
     else:
         logger.debug("BTC price file not found at %s, skipping cycle indicators", btc_file)
 
