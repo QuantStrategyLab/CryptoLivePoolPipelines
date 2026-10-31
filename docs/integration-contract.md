@@ -364,10 +364,18 @@ authenticity, clock accuracy, completeness, historical revisions or full PIT.
 The existing build call does not pass this optional cutoff; its cycle output
 therefore remains unverified and is not a strict authenticated input. The six
 standard pool artifacts and their publication contract are unchanged.
-When strict validation fails, the build logs the optional export failure and
-returns no cycle result; a file from an older build may still exist. A consumer
-must use the returned result or a freshly isolated output directory, and must
-not treat that old file as the result of the failed build.
+At the start of a build, any existing `btc_cycle_indicators.json` is moved
+unchanged to a unique directory under `btc-cycle-history/`. A new result is
+written in a temporary directory and moved into the current path only after the
+export succeeds. If the BTC file is missing or export fails, the build returns
+an empty cycle result and leaves the current path absent. An earlier build
+failure also leaves it absent once retirement has succeeded. Archive names are
+not timestamps or evidence of historical availability; this preserves old
+bytes but does not reconstruct historical PIT. Consumers of this local file
+must treat an absent current path or an empty returned result as unavailable.
+Builds sharing an output directory must be serialized, and readers must wait
+for the intended build to finish. Retirement or archive failures abort the
+build; callers must not consume an old path after an unsuccessful retirement.
 
 The exported field `mvrv_zscore` is a price-derived proxy: it standardizes the
 Mayer Multiple against its rolling mean and standard deviation. It is not an
