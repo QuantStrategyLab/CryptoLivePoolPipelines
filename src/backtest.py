@@ -7,9 +7,12 @@ import numpy as np
 import pandas as pd
 
 from .evaluation import compute_performance_metrics
-from .models import fit_predict_models
+from .models import ModelPredictionResult, fit_predict_models, resolve_min_train_rows
 from .portfolio import build_weight_vector, calculate_turnover, select_portfolio
-from .utils import make_schedule, next_trading_date, wide_field_from_panel
+from .utils import get_logger, make_schedule, next_trading_date, wide_field_from_panel
+
+
+WARMUP_STATUS = "insufficient_warmup"
 
 
 @dataclass
@@ -139,10 +142,9 @@ def run_walkforward_scoring(
     # ranks also depend on the latest outcome of every eligible peer that day.
     label_ends = label_ends.where(panel["in_universe"]).groupby(level="date").transform("max")
 
-    all_predictions = []
-    window_rows = []
-    for window in windows:
-        date_index = panel.index.get_level_values("date")
+    date_index = panel.index.get_level_values("date")
+
+    def window_masks(window: dict[str, Any]) -> tuple[pd.Series, pd.Series, pd.Series]:
         pre_purge_train_mask = (
             (date_index >= window["train_start"])
             & (date_index <= window["train_end"])
@@ -159,9 +161,41 @@ def run_walkforward_scoring(
             & (date_index <= window["test_end"])
             & panel["in_universe"]
         )
+        return pre_purge_train_mask, train_mask, test_mask
+
+    # The earliest windows can have too little purged history by construction.
+    # Only that leading run is warmup. Once a window has enough rows, any later
+    # shortfall still reaches fit_predict_models and fails closed in
+    # production. If no window is sufficient, nothing is warmup, so the model
+    # layer decides (and raises in production) instead of silently skipping.
+    min_train_rows = resolve_min_train_rows(config)
+    first_sufficient = next(
+        (
+            position
+            for position, window in enumerate(windows)
+            if int(window_masks(window)[1].sum()) >= min_train_rows
+        ),
+        None,
+    )
+    warmup_count = first_sufficient or 0
+
+    all_predictions = []
+    window_rows = []
+    for position, window in enumerate(windows):
+        pre_purge_train_mask, train_mask, test_mask = window_masks(window)
         train_df = panel.loc[train_mask].copy()
         test_df = panel.loc[test_mask].copy()
-        result = fit_predict_models(train_df, test_df, feature_columns, config)
+        is_warmup = position < warmup_count
+        if is_warmup:
+            result = ModelPredictionResult(
+                predictions=pd.DataFrame(columns=["linear_score_raw", "ml_score_raw"], dtype=float),
+                linear_backend=WARMUP_STATUS,
+                ml_backend=WARMUP_STATUS,
+                train_rows=len(train_df),
+                test_rows=len(test_df),
+            )
+        else:
+            result = fit_predict_models(train_df, test_df, feature_columns, config)
         train_dates_pre_purge = int(
             panel.loc[pre_purge_train_mask].index.get_level_values("date").nunique()
         )
@@ -182,6 +216,7 @@ def run_walkforward_scoring(
                 "train_dates_pre_purge": train_dates_pre_purge,
                 "train_dates": train_dates,
                 "test_rows": result.test_rows,
+                "warmup_status": WARMUP_STATUS if is_warmup else "scored",
                 "linear_backend": result.linear_backend,
                 "ml_backend": result.ml_backend,
             }
@@ -200,6 +235,15 @@ def run_walkforward_scoring(
         panel["prediction_window_count"] = 0
 
     window_summary = pd.DataFrame(window_rows)
+    window_summary.attrs["insufficient_warmup_windows"] = warmup_count
+    window_summary.attrs["min_train_rows"] = min_train_rows
+    if warmup_count:
+        get_logger("run_walkforward_scoring").info(
+            "Skipped %d leading walk-forward window(s) as %s (train rows below %d).",
+            warmup_count,
+            WARMUP_STATUS,
+            min_train_rows,
+        )
     return panel, window_summary
 
 

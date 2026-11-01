@@ -58,6 +58,7 @@ Rules:
 - Do not treat shadow outputs, external-data experiments, or research summaries as publish-ready production artifacts.
 - Only `core_major` build outputs that pass contract validation should be published to downstream systems.
 - If a manual run uses `--as-of-date` for historical investigation, treat it as replay unless you intentionally publish with `--allow-stale`.
+- Leading walk-forward windows whose purged training rows are below `model.min_train_rows` are recorded as `insufficient_warmup` in `walkforward_windows.csv` (`warmup_status` column) and skipped. Any later window below the minimum, or a run where no window reaches it, still fails closed in production and candidate mode.
 
 ## Upstream Reporting Responsibilities
 
