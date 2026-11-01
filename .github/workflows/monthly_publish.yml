@@ -191,7 +191,8 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
         run: python scripts/write_release_heartbeat.py --manifest data/output/release_manifest.json --output-dir data/output/heartbeat
 
-      - name: Push Heartbeat To Logs Branch
+      - name: Push Heartbeat To Logs Branch (prepare)
+        id: heartbeat_prepare
         if: success() && env.PUBLISH_ENABLED != 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -225,10 +226,30 @@ jobs:
           git add "monthly/${VERSION}.json"
           if git diff --cached --quiet; then
             echo "No heartbeat changes to commit."
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git commit -m "heartbeat: ${VERSION}"
-          git push origin "HEAD:${LOGS_BRANCH}"
+          {
+            echo "has_changes=true"
+            echo "publish_dir=${PWD}/monthly"
+            echo "publish_repo=${PWD}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Scan heartbeat publication
+        if: success() && steps.heartbeat_prepare.outputs.has_changes == 'true'
+        uses: QuantStrategyLab/.github/actions/scan-before-publish@0da4da68433b803cda17d3f84e29875a94a32273 # v1
+        with:
+          path: ${{ steps.heartbeat_prepare.outputs.publish_dir }}
+
+      - name: Publish heartbeat to logs branch
+        if: success() && steps.heartbeat_prepare.outputs.has_changes == 'true'
+        env:
+          PUBLISH_REPO: ${{ steps.heartbeat_prepare.outputs.publish_repo }}
+          LOGS_BRANCH: logs
+        run: |
+          set -euo pipefail
+          git -C "$PUBLISH_REPO" push origin "HEAD:${LOGS_BRANCH}"
 
   monthly-review-preflight:
     needs: monthly-publish
