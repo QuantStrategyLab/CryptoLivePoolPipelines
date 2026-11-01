@@ -27,6 +27,7 @@ EXPECTED_REMOTE_ACTIONS = {
         "actions/upload-artifact": ("cf430e030ddbb5b0abf93d22962f4752f3646cd9", "v7"),
         "actions/download-artifact": ("9000827ccba6bdab643e8b6fd33ac0654aef8333", "v8"),
         "google-github-actions/auth": ("7c6bc770dae815cd3e89ee6cdf493a5fab2cc093", "v3"),
+        "QuantStrategyLab/.github/actions/scan-before-publish": ("0da4da68433b803cda17d3f84e29875a94a32273", "v1"),
     },
     LIFECYCLE_WORKFLOW_PATH: {
         "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),

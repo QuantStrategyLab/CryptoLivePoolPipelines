@@ -238,7 +238,7 @@ jobs:
 
       - name: Scan heartbeat publication
         if: success() && steps.heartbeat_prepare.outputs.has_changes == 'true'
-        uses: QuantStrategyLab/.github/actions/scan-before-publish@0da4da68433b803cda17d3f84e29875a94a32273
+        uses: QuantStrategyLab/.github/actions/scan-before-publish@0da4da68433b803cda17d3f84e29875a94a32273 # v1
         with:
           path: ${{ steps.heartbeat_prepare.outputs.publish_dir }}
 
