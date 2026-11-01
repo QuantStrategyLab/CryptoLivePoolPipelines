@@ -156,7 +156,7 @@ class MonthlyBuildTelegramTests(unittest.TestCase):
             )()
             stdout = StringIO()
             with patch.object(MODULE, "parse_args", return_value=args), patch.object(
-                MODULE, "send_telegram_message"
+                MODULE, "send_telegram_message", return_value={"ok": True}
             ) as send_message, patch.dict(
                 os.environ,
                 {"TELEGRAM_BOT_TOKEN": "test-token", "GLOBAL_TELEGRAM_CHAT_ID": "shared-chat-id"},
@@ -165,8 +165,8 @@ class MonthlyBuildTelegramTests(unittest.TestCase):
                 MODULE.main()
 
         send_message.assert_called_once()
-        self.assertEqual(send_message.call_args.args[0], "test-token")
-        self.assertEqual(send_message.call_args.args[1], "shared-chat-id")
+        self.assertEqual(send_message.call_args.args[0], "shared-chat-id")
+        self.assertNotIn("test-token", send_message.call_args.args)
         self.assertIn("telegram_send=ok", stdout.getvalue())
 
 

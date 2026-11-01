@@ -104,6 +104,11 @@ jobs:
       - name: Append Monthly Report Job Summary
         run: cat data/output/monthly_report_bundle/job_summary.md >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Scan monthly report before publication
+        uses: QuantStrategyLab/.github/actions/scan-before-publish@0da4da68433b803cda17d3f84e29875a94a32273 # v1
+        with:
+          path: data/output/monthly_report_bundle
+
       - name: Upload Monthly Report Artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -191,44 +196,10 @@ jobs:
           GITHUB_SERVER_URL: ${{ github.server_url }}
         run: python scripts/write_release_heartbeat.py --manifest data/output/release_manifest.json --output-dir data/output/heartbeat
 
-      - name: Push Heartbeat To Logs Branch
+      - name: Record last success time
         if: success() && env.PUBLISH_ENABLED != 'false'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          LOGS_BRANCH: logs
         run: |
-          set -euo pipefail
-          VERSION=$(python - <<'PY'
-          import json
-          print(json.load(open("data/output/release_manifest.json"))["version"])
-          PY
-          )
-          HEARTBEAT_FILE="${GITHUB_WORKSPACE}/data/output/heartbeat/monthly/${VERSION}.json"
-          TMP_DIR="$(mktemp -d)"
-          git clone --no-checkout "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${TMP_DIR}/logs-repo"
-          cd "${TMP_DIR}/logs-repo"
-
-          if git ls-remote --exit-code --heads origin "${LOGS_BRANCH}" >/dev/null 2>&1; then
-            git fetch origin "${LOGS_BRANCH}:${LOGS_BRANCH}"
-            git checkout "${LOGS_BRANCH}"
-          else
-            git checkout --orphan "${LOGS_BRANCH}"
-            git rm -rf . >/dev/null 2>&1 || true
-            find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-          fi
-
-          mkdir -p monthly
-          cp "${HEARTBEAT_FILE}" "monthly/${VERSION}.json"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "monthly/${VERSION}.json"
-          if git diff --cached --quiet; then
-            echo "No heartbeat changes to commit."
-            exit 0
-          fi
-          git commit -m "heartbeat: ${VERSION}"
-          git push origin "HEAD:${LOGS_BRANCH}"
+          printf 'Last success: %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_STEP_SUMMARY"
 
   monthly-review-preflight:
     needs: monthly-publish
@@ -301,8 +272,15 @@ jobs:
           MONTHLY_REVIEW_MONTHLY_BUDGET_USD: ${{ vars.MONTHLY_REVIEW_MONTHLY_BUDGET_USD || '1.00' }}
         run: python3 scripts/run_monthly_dual_api_review.py
 
-      - name: Archive review verdict even when escalation is unavailable
+      - name: Scan review verdict before publication
+        id: scan-review-verdict
         if: always()
+        uses: QuantStrategyLab/.github/actions/scan-before-publish@0da4da68433b803cda17d3f84e29875a94a32273 # v1
+        with:
+          path: data/output/monthly_review_verdict.json
+
+      - name: Archive review verdict even when escalation is unavailable
+        if: always() && steps.scan-review-verdict.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: monthly-review-verdict-${{ github.run_id }}-${{ github.run_attempt }}

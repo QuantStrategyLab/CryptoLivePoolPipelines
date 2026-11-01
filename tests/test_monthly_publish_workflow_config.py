@@ -13,7 +13,7 @@ LIFECYCLE_WORKFLOW_PATH = PROJECT_ROOT / ".github" / "workflows" / "publish-life
 README_ZH_PATH = PROJECT_ROOT / "README.zh-CN.md"
 QPK_DEPENDENCY = (
     "quant-platform-kit @ "
-    "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@7f140f07ac89f0b4b88347a903906825dde11c39"
+    "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@59469a16b4ff7c5a1055caab21a1bd7a21dc0ea5"
 )
 PINNED_ACTIONS = (
     "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
@@ -22,6 +22,7 @@ PINNED_ACTIONS = (
 )
 EXPECTED_REMOTE_ACTIONS = {
     WORKFLOW_PATH: {
+        "QuantStrategyLab/.github/actions/scan-before-publish": ("0da4da68433b803cda17d3f84e29875a94a32273", "v1"),
         "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),
         "actions/setup-python": ("ece7cb06caefa5fff74198d8649806c4678c61a1", "v6"),
         "actions/upload-artifact": ("cf430e030ddbb5b0abf93d22962f4752f3646cd9", "v7"),
