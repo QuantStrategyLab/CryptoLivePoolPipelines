@@ -284,6 +284,14 @@ def _prepare_matrices(
     return x_train, y_train, x_score
 
 
+def resolve_min_train_rows(config: dict[str, Any]) -> int:
+    """Return the minimum training rows a model fit requires (default 100)."""
+    model_cfg = config.get("model", {})
+    if not isinstance(model_cfg, dict):
+        raise ModelBackendConfigurationError("model configuration must be an object.")
+    return int(model_cfg.get("min_train_rows", 100))
+
+
 def fit_predict_models(
     train_df: pd.DataFrame,
     score_df: pd.DataFrame,
@@ -300,7 +308,7 @@ def fit_predict_models(
     _backend_candidates(model_cfg, "ml", fallback_enabled)
     train_df = train_df.loc[train_df["blended_target"].notna()].copy()
     score_df = score_df.copy()
-    min_train_rows = int(model_cfg.get("min_train_rows", 100))
+    min_train_rows = resolve_min_train_rows(config)
 
     if train_df.empty or score_df.empty or len(train_df) < min_train_rows:
         if execution_mode in {"production", "candidate"}:

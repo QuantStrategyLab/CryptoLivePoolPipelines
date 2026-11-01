@@ -15,11 +15,20 @@ from src.backtest import (
 )
 from src.evaluation import evaluate_live_pool_shadow, summarize_live_pool_shadow
 from src.labels import build_labels
-from src.models import ModelPredictionResult
+from src.models import ModelBackendConfigurationError, ModelPredictionResult, fit_predict_models
 from src.ranking import build_final_scores
+
+TRAIN_WINDOW_DAYS = 40
 
 
 class WalkforwardValidationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Real production fits bind to a clean git commit; the worktree is
+        # dirty while tests run, so pin a fixed revision instead.
+        patcher = patch("src.models.resolve_clean_source_revision", return_value="a" * 40)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_build_walkforward_windows_defaults_purge_to_max_label_horizon(self) -> None:
         dates = list(pd.date_range("2024-01-01", periods=8, freq="D"))
         config = {
@@ -145,6 +154,98 @@ class WalkforwardValidationTests(unittest.TestCase):
         self.assertTrue(scored.loc[prefix, "prediction_window_count"].eq(0).all())
         results = run_backtest_suite(scored, config)
         self.assertIn("linear_score", results)
+
+    @staticmethod
+    def _warmup_panel(rows_per_window: list[int]) -> pd.DataFrame:
+        """Build a panel whose disjoint walk-forward windows train on the given row counts."""
+        dates = pd.date_range("2024-01-01", periods=TRAIN_WINDOW_DAYS * len(rows_per_window) + 1, freq="D")
+        index = pd.MultiIndex.from_product([dates, [f"S{i}" for i in range(10)]], names=["date", "symbol"])
+        rng = np.random.default_rng(7)
+        panel = pd.DataFrame(
+            {
+                "in_universe": True,
+                "feature_a": rng.normal(size=len(index)),
+                "blended_target": np.nan,
+            },
+            index=index,
+        )
+        date_index = panel.index.get_level_values("date")
+        for block, wanted in enumerate(rows_per_window):
+            start = TRAIN_WINDOW_DAYS * block
+            positions = np.flatnonzero(
+                (date_index >= dates[start]) & (date_index <= dates[start + TRAIN_WINDOW_DAYS - 2])
+            )[:wanted]
+            panel.iloc[positions, panel.columns.get_loc("blended_target")] = rng.normal(size=len(positions))
+        return panel
+
+    @staticmethod
+    def _warmup_config(execution_mode: str = "production") -> dict[str, object]:
+        return {
+            "data": {"start_date": "2020-01-01", "end_date": "2026-01-03"},
+            "universe": {"live_mode": "core_major", "minimum_history_days": 365},
+            "feature_engineering": {"breadth_min_names": 10},
+            "walkforward": {
+                "train_window_days": TRAIN_WINDOW_DAYS,
+                "test_window_days": 1,
+                "step_days": TRAIN_WINDOW_DAYS,
+                "purge_days": 1,
+                "prediction_aggregation": "mean",
+            },
+            "labels": {"horizons": [1]},
+            "model": {
+                "execution_mode": execution_mode,
+                "model_family": "crypto_live_pool_dual_regressor",
+                "linear_backend": "numpy_ridge",
+                "ml_backend": "numpy_ridge",
+                "random_state": 42,
+                "min_train_rows": 300,
+                "ridge_alpha": 1.0,
+            },
+        }
+
+    def test_leading_underfilled_windows_are_skipped_as_insufficient_warmup(self) -> None:
+        counts = [0, 0, 0, 70, 230, 350, 350, 350]
+        panel = self._warmup_panel(counts)
+
+        with patch("src.backtest.fit_predict_models", wraps=fit_predict_models) as fit:
+            scored, summary = run_walkforward_scoring(panel, ["feature_a"], self._warmup_config())
+
+        self.assertEqual(summary["train_rows"].tolist(), counts)
+        self.assertEqual(summary["warmup_status"].tolist(), ["insufficient_warmup"] * 5 + ["scored"] * 3)
+        self.assertEqual(summary.attrs["insufficient_warmup_windows"], 5)
+        self.assertEqual(fit.call_count, 3)
+        warmup_end = summary.loc[4, "test_end"]
+        dates = scored.index.get_level_values("date")
+        self.assertTrue(scored.loc[dates <= warmup_end, "linear_score_raw"].isna().all())
+        self.assertTrue(scored.loc[dates <= warmup_end, "prediction_window_count"].eq(0).all())
+        self.assertTrue(scored.loc[dates == summary.loc[5, "test_start"], "linear_score_raw"].notna().all())
+
+    def test_underfilled_window_after_a_sufficient_one_still_fails_closed(self) -> None:
+        panel = self._warmup_panel([0, 0, 350, 50, 350, 350])
+
+        with self.assertRaises(ModelBackendConfigurationError):
+            run_walkforward_scoring(panel, ["feature_a"], self._warmup_config())
+
+    def test_underfilled_latest_window_still_fails_closed(self) -> None:
+        panel = self._warmup_panel([0, 0, 70, 350, 350, 350, 350, 50])
+
+        with self.assertRaises(ModelBackendConfigurationError):
+            run_walkforward_scoring(panel, ["feature_a"], self._warmup_config())
+
+    def test_all_windows_underfilled_is_not_treated_as_warmup_in_production(self) -> None:
+        panel = self._warmup_panel([0, 70, 230, 250])
+
+        with self.assertRaises(ModelBackendConfigurationError):
+            run_walkforward_scoring(panel, ["feature_a"], self._warmup_config())
+
+    def test_all_windows_underfilled_keeps_research_behaviour(self) -> None:
+        panel = self._warmup_panel([0, 70, 230, 250])
+
+        scored, summary = run_walkforward_scoring(panel, ["feature_a"], self._warmup_config("research"))
+
+        self.assertEqual(summary.attrs["insufficient_warmup_windows"], 0)
+        self.assertEqual(set(summary["warmup_status"]), {"scored"})
+        self.assertTrue(scored["linear_score_raw"].isna().all())
 
     def test_purge_rejects_short_or_invalid_override_without_coercing_it(self) -> None:
         for purge in (0, 1, -1, 2.5, True, False, "bad", "2.5", float("nan"), float("inf"), [], {}):
