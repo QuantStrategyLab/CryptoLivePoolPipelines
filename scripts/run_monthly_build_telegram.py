@@ -9,10 +9,12 @@ except ImportError:  # Imported as scripts.run_monthly_build_telegram
     from scripts.display_names import display_name
 import json
 import os
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
+
+from quant_platform_kit.notifications import (
+    NotificationIntent, install_log_redaction, send_notification_intent,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -282,20 +284,15 @@ def format_message(payload: dict[str, Any], *, lang: str | None = None) -> str:
     return "\n".join(lines)
 
 
-def send_telegram_message(token: str, chat_id: str, message: str) -> None:
-    body = urllib.parse.urlencode({"chat_id": chat_id, "text": message}).encode("utf-8")
-    request = urllib.request.Request(
-        url=f"https://api.telegram.org/bot{token}/sendMessage",
-        data=body,
-        method="POST",
+def send_telegram_message(chat_id: str, message: str) -> dict:
+    intent = NotificationIntent(
+        text=message, run_id=os.getenv("GITHUB_RUN_ID", "monthly-build"), chat_ids=(chat_id,),
     )
-    with urllib.request.urlopen(request, timeout=15) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    if not payload.get("ok"):
-        raise RuntimeError(f"telegram api returned not ok: {payload}")
+    return send_notification_intent(intent, bot_token_env="TELEGRAM_BOT_TOKEN", timeout=15)
 
 
 def main() -> None:
+    install_log_redaction(wrap_streams=True)
     args = parse_args()
     payload = build_health_payload(args.output_dir)
     message = format_message(payload, lang=getattr(args, "lang", ""))
@@ -316,9 +313,12 @@ def main() -> None:
         return
 
     try:
-        send_telegram_message(token, chat_id, message)
-    except Exception as exc:
-        print(f"telegram_send=failed {exc}")
+        receipt = send_telegram_message(chat_id, message)
+        if not receipt["ok"]:
+            print("telegram_send=failed")
+            return
+    except ValueError:
+        print("telegram_send=failed invalid notification")
         return
     print("telegram_send=ok")
 

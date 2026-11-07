@@ -11,8 +11,10 @@ import pandas as pd
 
 def get_logger(name: str = "crypto_live_pool_rotation") -> logging.Logger:
     """Create a process-wide console logger with a simple format."""
+    from quant_platform_kit.notifications import install_log_redaction
     logger = logging.getLogger(name)
     if logger.handlers:
+        install_log_redaction(wrap_streams=True)
         return logger
 
     logger.setLevel(logging.INFO)
@@ -22,6 +24,7 @@ def get_logger(name: str = "crypto_live_pool_rotation") -> logging.Logger:
     )
     logger.addHandler(handler)
     logger.propagate = False
+    install_log_redaction(wrap_streams=True)
     return logger
 
 
