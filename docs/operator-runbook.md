@@ -208,6 +208,14 @@ workflow runs this shadow build automatically before the review step.
 
 9. Only after steps 1-8 pass, run the real publish path through the workflow or a controlled manual execution.
 
+A manual GitHub run defaults to `preview_only=true` and skips cloud authentication and publication.
+Use `preview_only=false` on `main` for an authorized publish. The natural schedule
+runs on day 1 at 03:23 UTC and has a backup on day 2 at 03:41 UTC. The backup
+checks this month's GitHub runs and proceeds only if none are active and no
+production publish step has started. If a publish step started and then failed,
+verify the production pointer before retrying.
+
+
 ## Preflight Checklist
 
 - `requirements-lock.txt` is present and matches the intended release dependency set.

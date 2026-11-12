@@ -40,10 +40,33 @@ class ScheduledCycleTests(unittest.TestCase):
 
     def test_grace_and_adoption_do_not_create_early_missed_cycles(self):
         for now in (datetime(2026, 10, 20, tzinfo=timezone.utc),
-                    datetime(2026, 11, 1, 5, 14, tzinfo=timezone.utc)):
+                    datetime(2026, 11, 1, 5, 22, tzinfo=timezone.utc)):
             self.assertEqual(monitor.scheduled_cycles([], Mock(), now), [])
-        records = monitor.scheduled_cycles([], Mock(), datetime(2026, 11, 1, 5, 15, tzinfo=timezone.utc))
+        records = monitor.scheduled_cycles([], Mock(), datetime(2026, 11, 1, 5, 23, tzinfo=timezone.utc))
         self.assertEqual(records, [{"cycle": "2026-11", "outcome": "missing"}])
+
+    def test_noop_backup_cannot_hide_successful_primary(self):
+        primary = run(11, run_id=100)
+        backup = {**run(11, run_id=200), "created_at": "2026-11-02T03:41:00Z"}
+        def read(run_id):
+            if run_id == 100:
+                return jobs("success")
+            return [{"name": "monthly-slot", "conclusion": "success"},
+                    {"name": "monthly-publish", "conclusion": "skipped"}]
+        records = monitor.scheduled_cycles([primary, backup], read, self.now)
+        self.assertEqual(records[-1]["outcome"], "success")
+
+    def test_preview_does_not_count_as_missing_review(self):
+        preview = run(11, event="workflow_dispatch")
+        read = Mock(return_value=[{"name": "monthly-publish", "steps": [
+            {"name": "Validate production candidate without publishing", "conclusion": "success"},
+        ]}])
+        self.assertEqual(monitor.manual_cycles([preview], read, self.now), [])
+        failed_preview = {**preview, "display_title": "Monthly Pool Preview", "conclusion": "failure"}
+        unused = Mock()
+        self.assertEqual(monitor.manual_cycles([failed_preview], unused, self.now), [])
+        unused.assert_not_called()
+
 
     def test_completed_publish_without_review_is_unhealthy(self):
         records = monitor.scheduled_cycles([run(11)], Mock(return_value=[]), self.now)
