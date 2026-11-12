@@ -1,0 +1,17 @@
+{
+  "version": "2026-11-11-core_major",
+  "as_of_date": "2026-11-11",
+  "mode": "core_major",
+  "pool_size": 5,
+  "symbols": [
+    "ZECUSDT",
+    "UNIUSDT",
+    "NEARUSDT",
+    "LINKUSDT",
+    "ETHUSDT"
+  ],
+  "storage_prefix": "gs://binancequant-crypto-leader-rotation/crypto-live-pool-pipelines/releases/2026-11-11-core_major",
+  "generated_at": "2026-11-12T21:08:59.100004+00:00",
+  "workflow_run_id": "43303074953",
+  "workflow_run_url": "https://github.com/QuantStrategyLab/CryptoLivePoolPipelines/actions/runs/43303074953"
+}
