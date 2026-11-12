@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -22,6 +23,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default="config/default.yaml", help="Path to the YAML config file.")
     parser.add_argument("--mode", default=None, help="Release mode, e.g. core_major.")
     parser.add_argument("--dry-run", action="store_true", help="Build publish payloads without writing to GCS or Firestore.")
+    parser.add_argument("--expected-pool-version", default=None)
+    parser.add_argument("--expected-pool-sha256", default=None)
     parser.add_argument("--summary-only", action="store_true", help="Omit cloud paths and the full publish payload from logs.")
     parser.add_argument("--mock", action="store_true", help="Alias of --dry-run for local smoke validation.")
     parser.add_argument("--project-id", default=None, help="Optional explicit cloud project override.")
@@ -59,6 +62,8 @@ def main() -> None:
         firestore_document=args.firestore_document,
         max_age_days=args.contract_max_age_days,
         require_freshness=not args.allow_stale,
+        expected_pool_version=args.expected_pool_version,
+        expected_pool_sha256=args.expected_pool_sha256,
     )
 
     settings = result["settings"]
@@ -72,6 +77,12 @@ def main() -> None:
         settings.mode,
         settings.dry_run,
     )
+    if args.summary_only and settings.dry_run:
+        exact = firestore_payload["live_pool_legacy_exact_bytes"]["utf8_text"].encode("utf-8")
+        print(json.dumps({
+            "pool_candidate_version": artifacts.version,
+            "pool_candidate_sha256": hashlib.sha256(exact).hexdigest(),
+        }, sort_keys=True))
     if not args.summary_only:
         logger.info("Release prefix: %s", storage_layout["storage_prefix_uri"])
         logger.info("Current prefix: %s", storage_layout["current_prefix_uri"])

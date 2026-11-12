@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
@@ -17,6 +18,7 @@ from src.publish import (
     build_storage_layout,
     ensure_publish_preflight,
     load_release_artifacts,
+    run_release_publish,
     upload_release_artifacts,
 )
 from src.model_run_manifest import (
@@ -273,6 +275,23 @@ class ReleaseContractValidationTests(unittest.TestCase):
         artifacts = load_release_artifacts(output_dir, "core_major")
         settings = build_publish_settings()
         return artifacts, settings, build_storage_layout(settings, artifacts)
+
+    def test_approved_pool_mismatch_stops_before_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_dir = self.build_runtime_identity_outputs(Path(tmp_dir))
+            artifacts = load_release_artifacts(output_dir, "core_major")
+            config = {"paths": SimpleNamespace(output_dir=output_dir), "export": {"live_pool_size": 5}}
+            with patch("src.publish.resolve_publish_settings", return_value=build_publish_settings()), \
+                    patch("src.publish.ensure_publish_preflight"), \
+                    patch("src.publish.upload_release_artifacts") as upload, \
+                    patch("src.publish.publish_firestore_summary") as publish:
+                with self.assertRaisesRegex(ValueError, "does not match the approved candidate"):
+                    run_release_publish(
+                        config, expected_pool_version=artifacts.version,
+                        expected_pool_sha256="0" * 64,
+                    )
+                upload.assert_not_called()
+                publish.assert_not_called()
 
     def test_validate_release_outputs_accepts_consistent_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

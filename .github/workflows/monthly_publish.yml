@@ -1,5 +1,5 @@
 name: Monthly Publish
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_only && 'Monthly Pool Preview' || 'Monthly Publish' }}
+run-name: ${{ (github.event_name == 'schedule' || inputs.preview_only) && 'Monthly Pool Preview' || 'Monthly Publish' }}
 
 "on":
   schedule:
@@ -11,6 +11,10 @@ run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_only &&
         description: "Build and validate the pool without publishing it"
         type: boolean
         default: true
+      candidate_run_id:
+        description: Successful main-branch preview run to approve and publish
+        type: string
+        required: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
@@ -24,7 +28,56 @@ jobs:
       actions: read
     outputs:
       run: ${{ steps.slot.outputs.run }}
+      version: ${{ steps.candidate.outputs.version }}
+      sha256: ${{ steps.candidate.outputs.sha256 }}
     steps:
+      - name: Verify the selected production pool candidate
+        id: candidate
+        if: github.event_name == 'workflow_dispatch' && !inputs.preview_only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" = refs/heads/main && "$CANDIDATE_RUN" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN}" |
+            jq -e --arg sha "$GITHUB_SHA" '
+              .head_branch == "main" and .head_sha == $sha and
+              .path == ".github/workflows/monthly_publish.yml" and
+              .display_title == "Monthly Pool Preview" and .conclusion == "success"
+            ' >/dev/null
+          gh run view "$CANDIDATE_RUN" --repo "$GITHUB_REPOSITORY" --log |
+            python3 -c '
+          import datetime
+          import json
+          import os
+          import re
+          import sys
+
+          candidates = []
+          for line in sys.stdin:
+              if "Validate production candidate without publishing" not in line or "{" not in line:
+                  continue
+              try:
+                  item = json.loads(line[line.index("{"):])
+              except ValueError:
+                  continue
+              if isinstance(item, dict) and set(item) == {"pool_candidate_version", "pool_candidate_sha256"}:
+                  candidates.append(item)
+          if len(candidates) != 1:
+              raise SystemExit("Exactly one validated pool candidate is required")
+          version = candidates[0]["pool_candidate_version"]
+          digest = candidates[0]["pool_candidate_sha256"]
+          if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9_]+", version) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+              raise SystemExit("Invalid candidate identity")
+          age = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.date.fromisoformat(version[:10])).days
+          if not 0 <= age <= 45:
+              raise SystemExit("The preview is no longer fresh")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"version={version}", f"sha256={digest}", sep="\n", file=output)
+          print(f"Production candidate {version} was validated.")
+          '
+
       - name: Check the primary run before using the backup slot
         id: slot
         env:
@@ -43,8 +96,8 @@ jobs:
             exit 1
           fi
           previous=$(jq -r --arg self "$GITHUB_RUN_ID" '
-            .workflow_runs[] | select((.id | tostring) != $self) | [.id, .status] | @tsv' <<< "$runs")
-          while IFS=$'\t' read -r prior_id status; do
+            .workflow_runs[] | select((.id | tostring) != $self) | [.id, .status, .event] | @tsv' <<< "$runs")
+          while IFS=$'\t' read -r prior_id status event; do
             [ -n "$prior_id" ] || continue
             if [ "$status" != completed ]; then
               echo "run=false" >> "$GITHUB_OUTPUT"
@@ -58,16 +111,38 @@ jobs:
             fi
             # A started publish step may have written before failing. Check
             # the production pointer manually before any retry in that case.
-            if jq -e '[.[].jobs[].steps[]? | select(.name == "Publish Production v1 Release" and .started_at != null and .conclusion != "skipped")] | length > 0' <<< "$pages" >/dev/null; then
+            if jq -e --arg event "$event" '[.[].jobs[].steps[]? | select((.name == "Publish Production v1 Release" and .started_at != null and .conclusion != "skipped") or
+                ($event == "schedule" and .name == "Validate production candidate without publishing" and .conclusion == "success"))] | length > 0' <<< "$pages" >/dev/null; then
               echo "run=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           done <<< "$previous"
           echo "run=true" >> "$GITHUB_OUTPUT"
 
-  monthly-publish:
+  approve-publish:
+    name: Approve publishing the selected pool
     needs: monthly-slot
-    if: needs.monthly-slot.outputs.run == 'true' && (github.ref_name == 'main' || (github.ref_name != 'logs' && inputs.preview_only))
+    if: >-
+      github.ref == 'refs/heads/main' && github.run_attempt == 1 &&
+      github.event_name == 'workflow_dispatch' && !inputs.preview_only &&
+      needs.monthly-slot.outputs.version != '' && vars.PUBLISH_ENABLED != 'false'
+    environment: pool-production-approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions: {}
+    steps:
+      - name: Record approval
+        env:
+          CANDIDATE_VERSION: ${{ needs.monthly-slot.outputs.version }}
+        run: printf 'Approved production pool %s.\n' "$CANDIDATE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+  monthly-publish:
+    needs: [monthly-slot, approve-publish]
+    if: >-
+      !cancelled() && needs.monthly-slot.result == 'success' && needs.monthly-slot.outputs.run == 'true' &&
+      ((needs.approve-publish.result == 'success' && github.event_name == 'workflow_dispatch' && !inputs.preview_only) ||
+      (needs.approve-publish.result == 'skipped' && (github.event_name == 'schedule' || inputs.preview_only))) &&
+      (github.ref_name == 'main' || (github.ref_name != 'logs' && inputs.preview_only))
     runs-on:
       - self-hosted
       - Linux
@@ -82,7 +157,9 @@ jobs:
       id-token: write
       issues: write
     env:
-      PUBLISH_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_only && 'false' || vars.PUBLISH_ENABLED || 'true' }}
+      PUBLISH_ENABLED: ${{ needs.approve-publish.result == 'success' && 'true' || 'false' }}
+      APPROVED_POOL_VERSION: ${{ needs.monthly-slot.outputs.version }}
+      APPROVED_POOL_SHA256: ${{ needs.monthly-slot.outputs.sha256 }}
       PUBLISH_MODE: ${{ vars.PUBLISH_MODE || 'core_major' }}
       RELEASE_CHANNEL: production
       PRODUCTION_PROFILE: binance_only_core_major_monthly
@@ -122,7 +199,11 @@ jobs:
 
       - name: Build Production v1 Live Pool And Shadow Tracks
         run: |
-          python scripts/run_monthly_shadow_build.py \
+          args=()
+          if [ "$PUBLISH_ENABLED" = true ]; then
+            args+=(--as-of-date "${APPROVED_POOL_VERSION:0:10}")
+          fi
+          python scripts/run_monthly_shadow_build.py "${args[@]}" \
             --universe-mode "${PUBLISH_MODE}" \
             --shadow-universe-mode "${PUBLISH_MODE}" \
             --skip-publish-dry-run
@@ -133,7 +214,10 @@ jobs:
 
       - name: Publish Production v1 Release
         if: env.PUBLISH_ENABLED != 'false'
-        run: python scripts/publish_release.py --mode "${PUBLISH_MODE}"
+        run: |
+          set -euo pipefail
+          python scripts/publish_release.py --mode "${PUBLISH_MODE}" \
+            --expected-pool-version "$APPROVED_POOL_VERSION" --expected-pool-sha256 "$APPROVED_POOL_SHA256"
 
       - name: Write Release Status Summary
         run: python scripts/run_release_status_summary.py
