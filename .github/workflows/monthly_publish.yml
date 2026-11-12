@@ -2,16 +2,70 @@ name: Monthly Publish
 
 "on":
   schedule:
-    - cron: "15 3 1 * *"
+    - cron: "23 3 1 * *"
+    - cron: "41 3 2 * *"
   workflow_dispatch:
+    inputs:
+      preview_only:
+        description: "Build and validate the pool without publishing it"
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
+  monthly-slot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.slot.outputs.run }}
+    steps:
+      - name: Check the primary run before using the backup slot
+        id: slot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IS_BACKUP: ${{ github.event_name == 'schedule' && github.event.schedule == '41 3 2 * *' }}
+        run: |
+          set -euo pipefail
+          if [ "$IS_BACKUP" != true ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          month=$(date -u '+%Y-%m-01')
+          runs=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/monthly_publish.yml/runs"             -f branch=main -f "created=>=${month}" -F per_page=100)
+          if [ "$(jq -r '.total_count' <<< "$runs")" != "$(jq -r '.workflow_runs | length' <<< "$runs")" ]; then
+            echo "::error::Incomplete monthly run history."
+            exit 1
+          fi
+          previous=$(jq -r --arg self "$GITHUB_RUN_ID" '
+            .workflow_runs[] | select((.id | tostring) != $self) | [.id, .status] | @tsv' <<< "$runs")
+          while IFS=$'\t' read -r prior_id status; do
+            [ -n "$prior_id" ] || continue
+            if [ "$status" != completed ]; then
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${prior_id}/jobs?per_page=100")
+            if [ "$(jq -r '.total_count' <<< "$jobs")" != "$(jq -r '.jobs | length' <<< "$jobs")" ]; then
+              echo "::error::Incomplete prior job history."
+              exit 1
+            fi
+            # A started publish step may have written before failing. Check
+            # the production pointer manually before any retry in that case.
+            if jq -e '[.jobs[].steps[]? | select(.name == "Publish Production v1 Release" and .started_at != null and .conclusion != "skipped")] | length > 0' <<< "$jobs" >/dev/null; then
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done <<< "$previous"
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
   monthly-publish:
-    if: github.ref_name != 'logs'
+    needs: monthly-slot
+    if: needs.monthly-slot.outputs.run == 'true' && (github.ref_name == 'main' || (github.ref_name != 'logs' && inputs.preview_only))
     runs-on:
       - self-hosted
       - Linux
@@ -26,7 +80,7 @@ jobs:
       id-token: write
       issues: write
     env:
-      PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED || 'true' }}
+      PUBLISH_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_only && 'false' || vars.PUBLISH_ENABLED || 'true' }}
       PUBLISH_MODE: ${{ vars.PUBLISH_MODE || 'core_major' }}
       RELEASE_CHANNEL: production
       PRODUCTION_PROFILE: binance_only_core_major_monthly
@@ -48,6 +102,7 @@ jobs:
           python-version: "3.11"
 
       - name: Authenticate to Google Cloud
+        if: env.PUBLISH_ENABLED != 'false'
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
           workload_identity_provider: "projects/677468735457/locations/global/workloadIdentityPools/github-actions/providers/github-main"
@@ -70,7 +125,12 @@ jobs:
             --shadow-universe-mode "${PUBLISH_MODE}" \
             --skip-publish-dry-run
 
+      - name: Validate production candidate without publishing
+        if: env.PUBLISH_ENABLED == 'false'
+        run: python scripts/publish_release.py --dry-run --summary-only --mode "${PUBLISH_MODE}"
+
       - name: Publish Production v1 Release
+        if: env.PUBLISH_ENABLED != 'false'
         run: python scripts/publish_release.py --mode "${PUBLISH_MODE}"
 
       - name: Write Release Status Summary
@@ -105,6 +165,7 @@ jobs:
         run: cat data/output/monthly_report_bundle/job_summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Monthly Report Artifact
+        if: env.PUBLISH_ENABLED != 'false'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ${{ steps.monthly-report.outputs.artifact_name }}

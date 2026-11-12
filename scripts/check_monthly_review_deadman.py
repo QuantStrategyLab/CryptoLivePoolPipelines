@@ -27,7 +27,15 @@ def timestamp(value):
 def review_job_outcome(run, jobs):
     if run.get("status") != "completed":
         return "timed_out"
-    matches = [item for item in jobs(run["id"]) if item.get("name") == "monthly-dual-api-review"]
+    observed_jobs = jobs(run["id"])
+    publish = next((job for job in observed_jobs if job.get("name") == "monthly-publish"), {})
+    slot = next((job for job in observed_jobs if job.get("name") == "monthly-slot"), {})
+    if (publish.get("conclusion") == "skipped" and slot.get("conclusion") == "success") or any(
+        step.get("name") == "Validate production candidate without publishing" and step.get("conclusion") == "success"
+        for step in publish.get("steps", ())
+    ):
+        return None
+    matches = [item for item in observed_jobs if item.get("name") == "monthly-dual-api-review"]
     conclusion = matches[0].get("conclusion") if len(matches) == 1 else "missing"
     return ("success" if conclusion == "success" else conclusion
             if conclusion in {"skipped", "cancelled", "timed_out", "missing"} else "failure")
@@ -37,21 +45,24 @@ def scheduled_cycles(runs, jobs, now):
     """Newest expected monthly slot first, including missing and stalled runs.
 
     Match natural schedules only: successful manual/probe runs cannot conceal a
-    missing or failed natural cycle. The existing schedule is 03:15 UTC on day 1;
+    missing or failed natural cycle. The existing schedule is 03:23 UTC on day 1;
     allow two hours before observing that slot. No publication is dispatched.
     """
     if now.tzinfo is None:
         raise ValueError("timezone required")
     year, month = FIRST_SCHEDULED_CYCLE
     cycles = []
-    while datetime(year, month, 1, 5, 15, tzinfo=timezone.utc) <= now:
+    while datetime(year, month, 1, 5, 23, tzinfo=timezone.utc) <= now:
         key = f"{year:04}-{month:02}"
         matches = [run for run in runs if run.get("head_branch") == "main"
                    and run.get("event") == "schedule"
                    and timestamp(run["created_at"]).strftime("%Y-%m") == key]
-        latest = max(matches, key=lambda run: timestamp(run["created_at"])) if matches else None
-        cycles.append({"cycle": key, "outcome": "missing" if latest is None
-                       else review_job_outcome(latest, jobs)})
+        outcome = next(
+            (result for run in sorted(matches, key=lambda item: timestamp(item["created_at"]), reverse=True)
+             if (result := review_job_outcome(run, jobs)) is not None),
+            "missing",
+        )
+        cycles.append({"cycle": key, "outcome": outcome})
         year, month = (year + 1, 1) if month == 12 else (year, month + 1)
     return list(reversed(cycles))
 
@@ -64,7 +75,9 @@ def manual_cycles(runs, jobs, now):
             continue
         if run.get("status") != "completed" and (now - timestamp(run["created_at"])).total_seconds() < 7200:
             continue
-        cycles.append({"cycle": "manual:" + str(run["id"]), "outcome": review_job_outcome(run, jobs)})
+        outcome = review_job_outcome(run, jobs)
+        if outcome is not None:
+            cycles.append({"cycle": "manual:" + str(run["id"]), "outcome": outcome})
     return cycles
 
 
@@ -106,7 +119,9 @@ def review_outcomes(runs, jobs, *, since="2026-10-15T00:00:00Z"):
         if (run.get("head_branch") != "main" or run.get("status") != "completed"
                 or run["created_at"] < since or run.get("event") not in {"schedule", "workflow_dispatch"}):
             continue
-        outcomes.append(review_job_outcome(run, jobs))
+        outcome = review_job_outcome(run, jobs)
+        if outcome is not None:
+            outcomes.append(outcome)
     return outcomes
 
 

@@ -22,6 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default="config/default.yaml", help="Path to the YAML config file.")
     parser.add_argument("--mode", default=None, help="Release mode, e.g. core_major.")
     parser.add_argument("--dry-run", action="store_true", help="Build publish payloads without writing to GCS or Firestore.")
+    parser.add_argument("--summary-only", action="store_true", help="Omit cloud paths and the full publish payload from logs.")
     parser.add_argument("--mock", action="store_true", help="Alias of --dry-run for local smoke validation.")
     parser.add_argument("--project-id", default=None, help="Optional explicit cloud project override.")
     parser.add_argument("--cloud-bucket", default=None, help="Optional explicit cloud bucket override.")
@@ -71,24 +72,26 @@ def main() -> None:
         settings.mode,
         settings.dry_run,
     )
-    logger.info("Release prefix: %s", storage_layout["storage_prefix_uri"])
-    logger.info("Current prefix: %s", storage_layout["current_prefix_uri"])
-    logger.info(
-        "Firestore target: %s/%s",
-        settings.firestore_collection,
-        settings.firestore_document,
-    )
-    logger.info("Manifest written to %s", result["manifest_path"])
+    if not args.summary_only:
+        logger.info("Release prefix: %s", storage_layout["storage_prefix_uri"])
+        logger.info("Current prefix: %s", storage_layout["current_prefix_uri"])
+        logger.info(
+            "Firestore target: %s/%s",
+            settings.firestore_collection,
+            settings.firestore_document,
+        )
+        logger.info("Manifest written to %s", result["manifest_path"])
     logger.info(
         "Contract validation: version=%s | pool_size=%s | manifest_present=%s",
         result["validation"]["version"],
         result["validation"]["pool_size"],
         result["validation"]["manifest_present"],
     )
-    logger.info(
-        "Firestore payload:\n%s",
-        json.dumps(firestore_payload, ensure_ascii=False, indent=2),
-    )
+    if not args.summary_only:
+        logger.info(
+            "Firestore payload:\n%s",
+            json.dumps(firestore_payload, ensure_ascii=False, indent=2),
+        )
 
 
 if __name__ == "__main__":
