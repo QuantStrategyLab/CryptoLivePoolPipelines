@@ -96,8 +96,8 @@ jobs:
             exit 1
           fi
           previous=$(jq -r --arg self "$GITHUB_RUN_ID" '
-            .workflow_runs[] | select((.id | tostring) != $self) | [.id, .status, .event] | @tsv' <<< "$runs")
-          while IFS=$'\t' read -r prior_id status event; do
+            .workflow_runs[] | select((.id | tostring) != $self) | [.id, .status, .event, (.conclusion // "")] | @tsv' <<< "$runs")
+          while IFS=$'\t' read -r prior_id status event conclusion; do
             [ -n "$prior_id" ] || continue
             if [ "$status" != completed ]; then
               echo "run=false" >> "$GITHUB_OUTPUT"
@@ -111,8 +111,8 @@ jobs:
             fi
             # A started publish step may have written before failing. Check
             # the production pointer manually before any retry in that case.
-            if jq -e --arg event "$event" '[.[].jobs[].steps[]? | select((.name == "Publish Production v1 Release" and .started_at != null and .conclusion != "skipped") or
-                ($event == "schedule" and .name == "Validate production candidate without publishing" and .conclusion == "success"))] | length > 0' <<< "$pages" >/dev/null; then
+            if jq -e --arg event "$event" --arg conclusion "$conclusion" '[.[].jobs[].steps[]? | select((.name == "Publish Production v1 Release" and .started_at != null and .conclusion != "skipped") or
+                ($event == "schedule" and $conclusion == "success" and .name == "Validate production candidate without publishing" and .conclusion == "success"))] | length > 0' <<< "$pages" >/dev/null; then
               echo "run=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
