@@ -6,13 +6,12 @@ and bot-owned issue notifications. It already has the needed `actions:read`,
 monitor script, fake tests and this document: no secret, model, Dot route,
 publication workflow, trading configuration, IAM or server change is required.
 
-Expected natural cycles come from the existing 03:15 UTC first-of-month schedule,
-starting November 2026, with two hours of completion grace. The monitor now counts
-missing slots, failed/skipped reviews and stalled queued/running cycles together.
-Three consecutive unhealthy natural cycles alert even when the failures are a
-mixture of those conditions. Successful manual/probe runs cannot hide a missing
-natural review. Manual failures and overdue manual runs are observed separately;
-intentional manual absence is not a missed schedule.
+Natural previews run at 03:23 UTC on day 1, with a fallback at 03:41 UTC on day 2.
+Starting November 2026, the monitor waits until 05:41 UTC on day 2 before judging
+the month. Three consecutive unhealthy natural cycles alert by default, including
+missing, failed or stalled previews. Manual previews do not affect that history.
+Failed or overdue production publications and their review jobs are observed
+separately.
 
 The alert marker stays stable throughout one outage and changes after a verified
 successful review breaks that streak. Complete run history is paginated from the

@@ -83,9 +83,8 @@ Boundary rules:
 
 ## Monthly review-only API audit
 
-The `Monthly Publish` schedule remains `15 3 1 * *` (03:15 UTC on the first of
-each month; 11:15 in Singapore). After successful publication on `main` and creation
-of the existing `monthly-review` issue, a hosted preflight checks the existing
+After the approved publication on `main` creates the `monthly-review` issue,
+a hosted preflight checks the existing
 `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` secrets. It never creates or prints secrets.
 If either is unavailable to the workflow, preflight logs the missing names and
 posts `review unavailable`; the `monthly-dual-api-review` job is skipped. Repository
@@ -352,8 +351,9 @@ reports the gap and notifies the owner, without building or changing trading log
 No finding or AI response can edit code, configuration, settings, orders or servers.
 
 `Monthly Review Dead-man` runs independently after Monthly Publish and daily. It
-counts failed, skipped, cancelled, timed-out and missing review jobs, and missing
-natural monthly cycles after November 2026. `REVIEW_DEADMAN_THRESHOLD` defaults to
+tracks natural previews from November 2026 after the day-2 fallback window.
+It also counts failed, skipped, cancelled, timed-out and missing review jobs
+after production publication. `REVIEW_DEADMAN_THRESHOLD` defaults to
 `3` (range 1–24); success resets the streak. Alerts are bot-authored, deduplicated
 GitHub issues mentioning `REVIEW_OWNER_LOGIN` (default `Pigbibi`). A monitor API
 failure fails the monitor visibly rather than claiming health. Verdict artifacts

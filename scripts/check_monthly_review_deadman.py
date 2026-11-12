@@ -51,15 +51,15 @@ def review_job_outcome(run, jobs):
 def scheduled_cycles(runs, jobs, now):
     """Newest expected monthly slot first, including missing and stalled runs.
 
-    Match natural schedules only: successful manual/probe runs cannot conceal a
-    missing or failed natural cycle. The existing schedule is 03:23 UTC on day 1;
-    allow two hours before observing that slot. No publication is dispatched.
+    Match natural schedules only: successful manual runs cannot conceal a missing
+    or failed preview. Allow two hours after the day-2 03:41 UTC fallback before
+    judging the month. No publication is dispatched.
     """
     if now.tzinfo is None:
         raise ValueError("timezone required")
     year, month = FIRST_SCHEDULED_CYCLE
     cycles = []
-    while datetime(year, month, 1, 5, 23, tzinfo=timezone.utc) <= now:
+    while datetime(year, month, 2, 5, 41, tzinfo=timezone.utc) <= now:
         key = f"{year:04}-{month:02}"
         matches = [run for run in runs if run.get("head_branch") == "main"
                    and run.get("event") == "schedule"

@@ -8,7 +8,7 @@ from scripts.advisory_review_loop import deadman
 
 
 def run(month, *, event="schedule", status="completed", branch="main", run_id=None):
-    return {"id": run_id or month, "created_at": f"2026-{month:02}-01T03:15:00Z",
+    return {"id": run_id or month, "created_at": f"2026-{month:02}-01T03:23:00Z",
             "head_branch": branch, "status": status, "event": event}
 
 
@@ -17,7 +17,7 @@ def jobs(outcome):
 
 
 class ScheduledCycleTests(unittest.TestCase):
-    now = datetime(2027, 1, 1, 6, tzinfo=timezone.utc)
+    now = datetime(2027, 1, 2, 6, tzinfo=timezone.utc)
 
     def test_mixed_failure_and_missing_cycles_reach_threshold(self):
         records = monitor.scheduled_cycles([run(11)], Mock(return_value=jobs("skipped")), self.now)
@@ -40,9 +40,10 @@ class ScheduledCycleTests(unittest.TestCase):
 
     def test_grace_and_adoption_do_not_create_early_missed_cycles(self):
         for now in (datetime(2026, 10, 20, tzinfo=timezone.utc),
-                    datetime(2026, 11, 1, 5, 22, tzinfo=timezone.utc)):
+                    datetime(2026, 11, 1, 5, 23, tzinfo=timezone.utc),
+                    datetime(2026, 11, 2, 5, 40, tzinfo=timezone.utc)):
             self.assertEqual(monitor.scheduled_cycles([], Mock(), now), [])
-        records = monitor.scheduled_cycles([], Mock(), datetime(2026, 11, 1, 5, 23, tzinfo=timezone.utc))
+        records = monitor.scheduled_cycles([], Mock(), datetime(2026, 11, 2, 5, 41, tzinfo=timezone.utc))
         self.assertEqual(records, [{"cycle": "2026-11", "outcome": "missing"}])
 
     def test_noop_backup_cannot_hide_successful_primary(self):
@@ -130,7 +131,7 @@ class HistoryAndNotificationTests(unittest.TestCase):
              patch.object(monitor, "fetch_runs", return_value=[]), \
              patch.object(monitor, "datetime") as clock, \
              patch.object(monitor, "request_json", side_effect=api):
-            clock.now.return_value = datetime(2027, 1, 1, 6, tzinfo=timezone.utc)
+            clock.now.return_value = datetime(2027, 1, 2, 6, tzinfo=timezone.utc)
             # scheduled_cycles needs the actual datetime constructor as well.
             clock.side_effect = datetime
             return monitor.main()
