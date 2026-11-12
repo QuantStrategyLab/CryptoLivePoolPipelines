@@ -1,4 +1,5 @@
 name: Monthly Publish
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.preview_only && 'Monthly Pool Preview' || 'Monthly Publish' }}
 
 "on":
   schedule:
@@ -49,14 +50,15 @@ jobs:
               echo "run=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            jobs=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${prior_id}/jobs?per_page=100")
-            if [ "$(jq -r '.total_count' <<< "$jobs")" != "$(jq -r '.jobs | length' <<< "$jobs")" ]; then
+            pages=$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${prior_id}/jobs?filter=all&per_page=100")
+            if ! jq -e 'length > 0 and (map(.total_count) | unique | length) == 1
+                and ([.[].jobs[].id] | unique | length) == .[0].total_count' <<< "$pages" >/dev/null; then
               echo "::error::Incomplete prior job history."
               exit 1
             fi
             # A started publish step may have written before failing. Check
             # the production pointer manually before any retry in that case.
-            if jq -e '[.jobs[].steps[]? | select(.name == "Publish Production v1 Release" and .started_at != null and .conclusion != "skipped")] | length > 0' <<< "$jobs" >/dev/null; then
+            if jq -e '[.[].jobs[].steps[]? | select(.name == "Publish Production v1 Release" and .started_at != null and .conclusion != "skipped")] | length > 0' <<< "$pages" >/dev/null; then
               echo "run=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi

@@ -25,6 +25,8 @@ def timestamp(value):
 
 
 def review_job_outcome(run, jobs):
+    if run.get("event") == "workflow_dispatch" and run.get("display_title") == "Monthly Pool Preview":
+        return None
     if run.get("status") != "completed":
         return "timed_out"
     observed_jobs = jobs(run["id"])

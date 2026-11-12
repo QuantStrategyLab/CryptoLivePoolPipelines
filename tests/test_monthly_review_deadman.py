@@ -62,6 +62,11 @@ class ScheduledCycleTests(unittest.TestCase):
             {"name": "Validate production candidate without publishing", "conclusion": "success"},
         ]}])
         self.assertEqual(monitor.manual_cycles([preview], read, self.now), [])
+        failed_preview = {**preview, "display_title": "Monthly Pool Preview", "conclusion": "failure"}
+        unused = Mock()
+        self.assertEqual(monitor.manual_cycles([failed_preview], unused, self.now), [])
+        unused.assert_not_called()
+
 
     def test_completed_publish_without_review_is_unhealthy(self):
         records = monitor.scheduled_cycles([run(11)], Mock(return_value=[]), self.now)
