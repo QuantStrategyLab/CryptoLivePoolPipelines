@@ -521,6 +521,8 @@ def run_release_publish(
     firestore_document: str | None = None,
     max_age_days: int | None = 45,
     require_freshness: bool = True,
+    expected_pool_version: str | None = None,
+    expected_pool_sha256: str | None = None,
 ) -> dict[str, Any]:
     settings = resolve_publish_settings(
         config,
@@ -544,6 +546,10 @@ def run_release_publish(
     live_pool_legacy_exact_bytes = firestore_payload["live_pool_legacy_exact_bytes"][
         "utf8_text"
     ].encode("utf-8")
+    if expected_pool_version is not None or expected_pool_sha256 is not None:
+        if (expected_pool_version != artifacts.version
+                or expected_pool_sha256 != hashlib.sha256(live_pool_legacy_exact_bytes).hexdigest()):
+            raise ValueError("Built production pool does not match the approved candidate.")
     manifest = build_release_manifest(settings, artifacts, storage_layout, firestore_payload)
     manifest_path = write_release_manifest(artifacts.output_dir, manifest)
     validation = assert_release_outputs(

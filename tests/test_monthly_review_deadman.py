@@ -68,6 +68,16 @@ class ScheduledCycleTests(unittest.TestCase):
         unused.assert_not_called()
 
 
+    def test_validated_natural_candidate_counts_as_a_successful_preview(self):
+        preview = {**run(11), "display_title": "Monthly Pool Preview", "conclusion": "success"}
+        read = Mock(return_value=[{"name": "monthly-publish", "steps": [
+            {"name": "Validate production candidate without publishing", "conclusion": "success"},
+        ]}])
+        self.assertEqual(monitor.scheduled_cycles([preview], read, self.now)[-1]["outcome"], "success")
+        preview["conclusion"] = "failure"
+        self.assertEqual(monitor.scheduled_cycles([preview], read, self.now)[-1]["outcome"], "failure")
+
+
     def test_completed_publish_without_review_is_unhealthy(self):
         records = monitor.scheduled_cycles([run(11)], Mock(return_value=[]), self.now)
         self.assertEqual(records[-1]["outcome"], "missing")

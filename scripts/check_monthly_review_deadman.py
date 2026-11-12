@@ -32,10 +32,15 @@ def review_job_outcome(run, jobs):
     observed_jobs = jobs(run["id"])
     publish = next((job for job in observed_jobs if job.get("name") == "monthly-publish"), {})
     slot = next((job for job in observed_jobs if job.get("name") == "monthly-slot"), {})
-    if (publish.get("conclusion") == "skipped" and slot.get("conclusion") == "success") or any(
-        step.get("name") == "Validate production candidate without publishing" and step.get("conclusion") == "success"
-        for step in publish.get("steps", ())
-    ):
+    if publish.get("conclusion") == "skipped" and slot.get("conclusion") == "success":
+        return None
+    if run.get("event") == "schedule" and run.get("display_title") == "Monthly Pool Preview":
+        return "success" if run.get("conclusion") == "success" and any(
+            step.get("name") == "Validate production candidate without publishing" and step.get("conclusion") == "success"
+            for step in publish.get("steps", ())
+        ) else "failure"
+    if any(step.get("name") == "Validate production candidate without publishing" and step.get("conclusion") == "success"
+           for step in publish.get("steps", ())):
         return None
     matches = [item for item in observed_jobs if item.get("name") == "monthly-dual-api-review"]
     conclusion = matches[0].get("conclusion") if len(matches) == 1 else "missing"
