@@ -126,3 +126,5 @@ Keep credentials, private account details, and generated data out of Git.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Telegram notifications use QPK credential-free intents and safe receipts. The monthly workflow no longer commits runtime heartbeats or pool details to the public `logs` branch; its final public status is the last success time. Existing release storage is unchanged. Report artifacts are scanned before upload.
