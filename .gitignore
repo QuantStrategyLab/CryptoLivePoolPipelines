@@ -71,7 +71,6 @@ temp/
 # personal global ignore excludes Markdown.
 !AGENTS.md
 !CLAUDE.md
-!.github/engineering.md
 
 # Process notes stay out of the repository, see section 5.
 # An audit, a handoff or a review describes one moment; the code moves on and
@@ -88,3 +87,9 @@ docs/handoffs/
 ops-notes/
 *.local.md
 *.internal.md
+
+# Working notes are drafts, not documentation.
+docs/changes/
+docs/acceptance-policy.md
+.claude/
+.codex/
