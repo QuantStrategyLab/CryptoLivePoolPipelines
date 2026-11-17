@@ -85,6 +85,10 @@ on the existing `monthly-review` issue. It does not trigger the retired
 AIAuditBridge Codex Audit, does not use the Codex or Cursor CLI, and does not
 modify code or trading configuration.
 
+The review and synthetic key probe use the same model policy. Each provider selects a
+stable model in the evidence tier's approved family and price range, checks account
+access, and records the model returned by inference.
+
 The default per-request input cap is 16,000 tokens, the output cap is 2,500
 tokens, the timeout is 60 seconds, retries are zero, and the natural-month budget
 is 1 USD. Input is counted conservatively as UTF-8 byte lengths plus fixed

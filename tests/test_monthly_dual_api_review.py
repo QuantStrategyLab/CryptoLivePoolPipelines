@@ -59,6 +59,10 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
         (self.bundle / "ai_review_input.md").write_text("Published October upstream report", encoding="utf-8")
         (self.bundle / "strategy_metrics.json").write_text('{"snapshots": []}')
         self.config = MODULE.Config({})
+        refresh = patch.object(MODULE, "refresh_candidates",
+                               side_effect=lambda provider, tier, policy: (["synthetic-" + provider], "official_pricing"))
+        self.refresh = refresh.start()
+        self.addCleanup(refresh.stop)
         binding = patch.dict(os.environ, {"AI_SERVICE_URL": "https://service.example/mcp",
             "AI_SERVICE_AUDIENCE": "fixture-audience", "AI_SERVICE_PROFILE": "fixture-profile",
             "AI_SERVICE_MODEL": "fixture-model", "AI_SERVICE_TARGET": "quant-ai-service-v2",
@@ -66,7 +70,7 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
         binding.start()
         self.addCleanup(binding.stop)
         self.issue = FakeIssue()
-        self.clients = {name: Mock(review=Mock(return_value=json.dumps({"verdict": "approve", "severity": "none", "summary": "Review finding"})))
+        self.clients = {name: Mock(review=Mock(return_value=("synthetic", json.dumps({"verdict": "approve", "severity": "none", "summary": "Review finding"}))))
                         for name in ("OpenAI", "Anthropic")}
 
     def run_review(self):
@@ -74,16 +78,19 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
 
     def test_exactly_two_single_turn_requests_with_caps_and_no_tools(self):
         responses = [
-            {"choices": [{"message": {"content": json.dumps({"verdict": "approve", "severity": "none", "summary": "OpenAI finding"})}, "finish_reason": "stop"}],
+            {"id": "synthetic-openai"},
+            {"model": "synthetic-openai", "choices": [{"message": {"content": json.dumps({"verdict": "approve", "severity": "none", "summary": "OpenAI finding"})}, "finish_reason": "stop"}],
              "usage": {"prompt_tokens": 100, "completion_tokens": 50}},
-            {"content": [{"type": "text", "text": json.dumps({"verdict": "approve", "severity": "none", "summary": "Anthropic finding"})}], "stop_reason": "end_turn",
+            {"id": "synthetic-anthropic"},
+            {"model": "synthetic-anthropic", "content": [{"type": "text", "text": json.dumps({"verdict": "approve", "severity": "none", "summary": "Anthropic finding"})}], "stop_reason": "end_turn",
              "usage": {"input_tokens": 100, "output_tokens": 50}},
         ]
-        self.clients = {provider: MODULE.APIReviewer(provider, "fake-key") for provider in MODULE.MODELS}
+        self.clients = {provider: MODULE.APIReviewer(provider, "fake-key") for provider in MODULE.PROVIDERS}
         with patch.object(MODULE, "request_json", side_effect=responses) as request:
             self.assertTrue(self.run_review())
-        self.assertEqual(request.call_count, 2)
-        for call in request.call_args_list:
+        generated = [call for call in request.call_args_list if "payload" in call.kwargs]
+        self.assertEqual(len(generated), 2)
+        for call in generated:
             payload = call.kwargs["payload"]
             self.assertNotIn("tools", payload)
             self.assertNotIn("stream", payload)
@@ -93,12 +100,45 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
             bound = len(MODULE.SYSTEM.encode()) + len(users[0]["content"].encode()) + MODULE.FRAMING_TOKENS
             self.assertLessEqual(bound, self.config.max_input)
             self.assertEqual(call.kwargs["timeout"], 60)
-        self.assertEqual(request.call_args_list[0].kwargs["payload"]["max_completion_tokens"], 2500)
-        self.assertEqual(request.call_args_list[0].kwargs["payload"]["n"], 1)
-        self.assertEqual(request.call_args_list[1].kwargs["payload"]["max_tokens"], 2500)
+        self.assertEqual(generated[0].kwargs["payload"]["max_completion_tokens"], 2500)
+        self.assertEqual(generated[0].kwargs["payload"]["n"], 1)
+        self.assertEqual(generated[1].kwargs["payload"]["max_tokens"], 2500)
         self.assertTrue(self.issue.comments[0].startswith(MODULE.LEDGER_PREFIX))
+        self.assertIn("OpenAI (synthetic-openai)", self.issue.comments[-1])
         self.assertIn("OpenAI finding", self.issue.comments[-1])
         self.assertIn("Anthropic finding", self.issue.comments[-1])
+
+    def test_complex_tier_uses_account_catalog_and_skips_only_missing_models(self):
+        self.refresh.side_effect = None
+        self.refresh.return_value = (["synthetic-new", "synthetic-next"], "official_pricing")
+        missing = MODULE.urllib.error.HTTPError("https://example.invalid", 404, "", {},
+                                                io.BytesIO(b'{"error":{"code":"model_not_found"}}'))
+        with patch.object(MODULE, "request_json", side_effect=[missing, {"id": "synthetic-next"}]) as request:
+            self.assertEqual(MODULE.select_model("OpenAI", {}, "量" * 18000, self.config),
+                             ("synthetic-next", "official_pricing", "account_catalog"))
+        self.refresh.assert_called_once_with("openai", "complex", self.config.policy)
+        self.assertTrue(all("payload" not in c.kwargs for c in request.call_args_list))
+
+    def test_candidate_catalogs_share_one_provider_deadline(self):
+        self.refresh.side_effect = None
+        self.refresh.return_value = (["unavailable", "next"], "official_pricing")
+        missing = MODULE.urllib.error.HTTPError("https://example.invalid", 404, "", {},
+                                                io.BytesIO(b'{"error":{"code":"model_not_found"}}'))
+        with patch.object(MODULE.time, "monotonic", side_effect=[0, 0, 59, 61]), \
+                patch.object(MODULE, "request_json", side_effect=missing) as request:
+            with self.assertRaisesRegex(MODULE.ReviewUnavailable, "selection deadline"):
+                MODULE.select_model("OpenAI", {}, "synthetic", self.config)
+        request.assert_called_once()
+
+    def test_restricted_catalog_uses_one_generation_and_requires_matching_returned_model(self):
+        denied = MODULE.urllib.error.HTTPError("https://example.invalid", 401, "", {},
+                                               io.BytesIO(b'{"error":{"code":"insufficient_permissions"}}'))
+        response = {"model": "unrelated", "choices": [{"message": {"content": "1"}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 1}}
+        with patch.object(MODULE, "request_json", side_effect=[denied, response]) as request:
+            with self.assertRaisesRegex(MODULE.ReviewUnavailable, "unexpected provider model"):
+                MODULE.APIReviewer("OpenAI", "synthetic-key").review("synthetic", self.config)
+        self.assertEqual(len([c for c in request.call_args_list if "payload" in c.kwargs]), 1)
 
     def test_transient_failure_still_calls_other_provider_once_and_posts_unavailable(self):
         self.clients["OpenAI"].review.side_effect = TimeoutError("private error content")
@@ -133,22 +173,24 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
 
     def test_client_independently_rejects_oversized_prompt(self):
         with patch.object(MODULE, "request_json") as request:
-            for provider in MODULE.MODELS:
+            for provider in MODULE.PROVIDERS:
                 with self.assertRaises(MODULE.ReviewUnavailable):
                     MODULE.APIReviewer(provider, "fake").review("x" * 16000, self.config)
             request.assert_not_called()
 
     def test_output_usage_above_cap_is_unavailable(self):
-        self.clients = {provider: MODULE.APIReviewer(provider, "fake") for provider in MODULE.MODELS}
+        self.clients = {provider: MODULE.APIReviewer(provider, "fake") for provider in MODULE.PROVIDERS}
         responses = [
-            {"choices": [{"message": {"content": "invalid"}, "finish_reason": "stop"}],
+            {"id": "synthetic-openai"},
+            {"model": "synthetic-openai", "choices": [{"message": {"content": "invalid"}, "finish_reason": "stop"}],
              "usage": {"prompt_tokens": 100, "completion_tokens": 2501}},
-            {"content": [{"type": "text", "text": "invalid"}], "stop_reason": "max_tokens",
+            {"id": "synthetic-anthropic"},
+            {"model": "synthetic-anthropic", "content": [{"type": "text", "text": "invalid"}], "stop_reason": "max_tokens",
              "usage": {"input_tokens": 100, "output_tokens": 2500}},
         ]
         with patch.object(MODULE, "request_json", side_effect=responses) as request:
             self.assertFalse(self.run_review())
-        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_count, 4)
         self.assertIn("review unavailable: OpenAI, Anthropic", self.issue.comments[-1])
         self.assertNotIn("invalid", self.issue.comments[-1])
 
@@ -173,9 +215,9 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
             with self.subTest(failures=failures):
                 self.issue = FakeIssue()
                 self.clients = {
-                    name: Mock(review=Mock(return_value=json.dumps({
+                    name: Mock(review=Mock(return_value=("synthetic", json.dumps({
                         "verdict": "approve", "severity": "none", "summary": "Review finding",
-                    }))) for name in ("OpenAI", "Anthropic")
+                    })))) for name in ("OpenAI", "Anthropic")
                 }
                 for provider in failures:
                     self.clients[provider].review.side_effect = TimeoutError

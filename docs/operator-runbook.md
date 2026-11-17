@@ -117,14 +117,27 @@ missing usage, over-cap usage, or a truncated answer is unavailable. A wall-cloc
 deadline covers each HTTP request and response read. The review job has a twenty-minute
 overall deadline. Retries are fixed at zero to preserve the exactly-two-request limit.
 
-Models and standard-service rates are fixed in the review script:
-[`gpt-5.4-mini-2026-03-17`](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
-at $0.75/$4.50 per million input/output tokens, and
-[`claude-sonnet-4-6`](https://platform.claude.com/docs/en/models/sonnet-4-6/overview)
-at $3/$15. Defaults reserve **$0.119625** for both calls before either starts,
-including a 10% margin for regional processing charges (API token spend, excluding taxes).
-Model/rate changes require a reviewed code change; update rates when provider pricing
-changes. This budget covers this workflow's calls, not other activity on the API keys.
+The [monthly model policy](../config/monthly-audit-models.json) defines the
+baseline candidates and maximum standard input/output rates per million tokens.
+Both monthly reviews and synthetic key probes start in the standard tier. Evidence
+of 50,000 UTF-8 bytes or more uses the complex tier. The current ceilings in both
+tiers are $0.75/$4.50 for GPT mini and $3/$15 for Claude Sonnet.
+
+Configure `OPENAI_PRICING_ORIGIN` and `ANTHROPIC_PRICING_ORIGIN` as repository
+variables pointing to the providers' official documentation origins. Pricing reads
+are public and carry no credentials. Each provider refreshes its own stable
+candidates from its official standard pricing table, checks model metadata with its existing key, then makes at most one generation
+request. A missing catalog entry advances to the next eligible model. OpenAI keys
+with restricted catalog access verify the first eligible model through the Chat
+Completions receipt. Ambiguous or failed generation is never repeated. If pricing
+cannot be read, the approved baseline is used. Both final receipts must identify
+the selected model or its dated snapshot.
+
+Defaults reserve **$0.119625** for both calls before either starts, including a 10%
+margin for regional processing charges (API token spend, excluding taxes). The
+reservation uses the selected tier's price ceilings even if a cheaper model is
+available. This budget covers the monthly review job; the manually invoked
+synthetic probe has separate fixed input and output caps.
 
 The durable ledger consists exclusively of reservation comments on existing review
 issues. Runs are serialized by `monthly-dual-api-review-budget`. Before reserving,
