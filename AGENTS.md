@@ -36,7 +36,7 @@ python -m unittest discover -s tests -v
 CI also verifies the clean-wheel package contract, which asserts the `src/`
 package layout. Keep module paths stable when moving files.
 
-Organization documentation rules are checked by `python scripts/check_style.py --phase 2` (`Documentation check` in CI).
+Organization documentation rules run in CI via `QuantStrategyLab/.github/.github/workflows/docs-acceptance.yml` (`Documentation check`), or offline with a sibling `QuantStrategyLab/.github` checkout (`git clone https://github.com/QuantStrategyLab/.github ../.github && python3 ../.github/scripts/check_style.py --root . --phase 2`).
 
 ## Naming and documentation
 

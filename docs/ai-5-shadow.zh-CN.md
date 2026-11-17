@@ -1,5 +1,7 @@
 # AI-5：月度研究 hook 只记录
 
+[English](ai-5-shadow.md) | 简体中文
+
 `config/ai-hook-shadow.json` 的唯一目标是 QuantAIService v2；全部绑定值由配置和已有 secret 引用注入，没有默认值。实际组织配置仍需获准接口与准确输入，不能把本文件当作已经注入成功。
 
 工作流的 URL、audience、profile、model 通过 `AI_HOOK_URL_SECRET`、`AI_HOOK_AUDIENCE_SECRET`、`AI_HOOK_PROFILE_SECRET`、`AI_HOOK_MODEL_SECRET` 配置选择器引用已有且获准的 secret，不再直接将普通变量值放进 runner 环境输出。选择器不是实际 secret 名称；缺少选择器或对应 secret 仍安全失败，不创建凭据或扩大权限。
