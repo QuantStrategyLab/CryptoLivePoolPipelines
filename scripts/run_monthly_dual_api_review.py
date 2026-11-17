@@ -244,7 +244,9 @@ def matches_model(model, actual):
 
 
 def select_model(provider, headers, materials, config):
-    candidates, pricing = refresh_candidates(provider.lower(), review_tier(materials), config.policy)
+    # Bound the full pricing read so a stalled provider cannot consume the other review's window.
+    with deadline(min(12, config.timeout)):
+        candidates, pricing = refresh_candidates(provider.lower(), review_tier(materials), config.policy)
     for model in candidates:
         try:
             model_url = urllib.parse.urljoin(ENDPOINTS[provider], "/v1/models/" + urllib.parse.quote(model, safe=""))
