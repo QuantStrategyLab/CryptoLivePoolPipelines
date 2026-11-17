@@ -42,7 +42,8 @@ SYSTEM = (
 FRAMING_TOKENS = 256
 PROVIDERS = ("OpenAI", "Anthropic")
 POLICY_PATH = Path(__file__).resolve().parents[1] / "config/monthly-audit-models.json"
-CATALOGS = {"OpenAI": "https://api.openai.com/v1/models/", "Anthropic": "https://api.anthropic.com/v1/models/"}
+ENDPOINTS = {"OpenAI": "https://api.openai.com/v1/chat/completions",
+             "Anthropic": "https://api.anthropic.com/v1/messages"}
 # Reserve the known 10% regional surcharge as well as standard-service token cost.
 PRICE_MARGIN = Decimal("1.10")
 
@@ -246,7 +247,8 @@ def select_model(provider, headers, materials, config):
     candidates, _ = refresh_candidates(provider.lower(), review_tier(materials), config.policy)
     for model in candidates:
         try:
-            metadata = request_json(CATALOGS[provider] + urllib.parse.quote(model, safe=""),
+            model_url = urllib.parse.urljoin(ENDPOINTS[provider], "/v1/models/" + urllib.parse.quote(model, safe=""))
+            metadata = request_json(model_url,
                                     headers, timeout=config.timeout)
         except urllib.error.HTTPError as exc:
             with exc:
@@ -288,7 +290,7 @@ class APIReviewer:
                 {"role": "system", "content": system}, *messages],
                 "max_completion_tokens": config.max_output, "n": 1,
                 "reasoning_effort": "low", "store": False, "service_tier": "default"}
-            response = request_json("https://api.openai.com/v1/chat/completions",
+            response = request_json(ENDPOINTS[self.provider],
                                     headers, payload=payload, timeout=config.timeout)
             choice = response["choices"][0]
             text = choice["message"]["content"]
@@ -303,7 +305,7 @@ class APIReviewer:
                 payload["thinking"] = {"type": "between_tools"}
             elif model in ("claude-sonnet-5", "claude-sonnet-4-6"):
                 payload["thinking"] = {"type": "disabled"}
-            response = request_json("https://api.anthropic.com/v1/messages", headers,
+            response = request_json(ENDPOINTS[self.provider], headers,
                                     payload=payload, timeout=config.timeout)
             text = "\n".join(block["text"] for block in response["content"] if block["type"] == "text")
             usage = response["usage"]

@@ -123,8 +123,10 @@ Both monthly reviews and synthetic key probes start in the standard tier. Eviden
 of 50,000 UTF-8 bytes or more uses the complex tier. The current ceilings in both
 tiers are $0.75/$4.50 for GPT mini and $3/$15 for Claude Sonnet.
 
-Each provider refreshes its own stable candidates from its official standard pricing
-table, checks model metadata with its existing key, then makes at most one generation
+Configure `OPENAI_PRICING_ORIGIN` and `ANTHROPIC_PRICING_ORIGIN` as repository
+variables pointing to the providers' official documentation origins. Pricing reads
+are public and carry no credentials. Each provider refreshes its own stable
+candidates from its official standard pricing table, checks model metadata with its existing key, then makes at most one generation
 request. A missing catalog entry advances to the next eligible model. OpenAI keys
 with restricted catalog access verify the first eligible model through the Chat
 Completions receipt. Ambiguous or failed generation is never repeated. If pricing

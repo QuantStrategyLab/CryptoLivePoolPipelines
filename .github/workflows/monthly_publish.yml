@@ -42,6 +42,8 @@ jobs:
           persist-credentials: false
       - name: Verify both provider keys
         env:
+          OPENAI_PRICING_ORIGIN: ${{ vars.OPENAI_PRICING_ORIGIN }}
+          ANTHROPIC_PRICING_ORIGIN: ${{ vars.ANTHROPIC_PRICING_ORIGIN }}
           OPENAI_API_KEY: ${{ inputs.probe_provider != 'Anthropic' && secrets.OPENAI_API_KEY || '' }}
           ANTHROPIC_API_KEY: ${{ inputs.probe_provider != 'OpenAI' && secrets.ANTHROPIC_API_KEY || '' }}
           PROBE_PROVIDER: ${{ inputs.probe_provider }}
@@ -479,6 +481,8 @@ jobs:
           path: data/output/monthly_report_bundle
       - name: Post single-turn OpenAI and Anthropic reviews to the existing issue
         env:
+          OPENAI_PRICING_ORIGIN: ${{ vars.OPENAI_PRICING_ORIGIN }}
+          ANTHROPIC_PRICING_ORIGIN: ${{ vars.ANTHROPIC_PRICING_ORIGIN }}
           AI_SERVICE_TARGET: quant-ai-service-v2
           AI_HOOK_MODE: shadow
           AI_SERVICE_URL: ${{ secrets[vars.AI_HOOK_URL_SECRET] }}
