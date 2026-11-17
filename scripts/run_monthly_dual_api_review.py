@@ -230,7 +230,7 @@ class APIReviewer:
         self.provider = provider
         self.key = key
 
-    def review(self, materials, config):
+    def review(self, materials, config, *, verify_model=False):
         if len(SYSTEM.encode("utf-8")) + len(materials.encode("utf-8")) + FRAMING_TOKENS > config.max_input:
             raise ReviewUnavailable("input cap exceeded")
         messages = [{"role": "user", "content": materials}]
@@ -260,6 +260,8 @@ class APIReviewer:
                             + usage.get("cache_read_input_tokens", 0))
             output_tokens = usage["output_tokens"]
             complete = response["stop_reason"] == "end_turn"
+        if verify_model and response.get("model") != MODELS[self.provider]:
+            raise ReviewUnavailable("unexpected provider model")
         if (type(input_tokens) is not int or type(output_tokens) is not int
                 or not 0 <= input_tokens <= config.max_input
                 or not 0 <= output_tokens <= config.max_output):
