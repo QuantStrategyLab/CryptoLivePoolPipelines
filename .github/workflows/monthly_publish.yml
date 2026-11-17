@@ -11,6 +11,11 @@ run-name: ${{ inputs.key_probe && 'Monthly API Key Probe' || (github.event_name 
         description: 'Verify both monthly review keys with synthetic data only'
         type: boolean
         default: false
+      probe_provider:
+        description: 'Provider for key_probe (ignored during ordinary monthly runs)'
+        type: choice
+        options: [both, OpenAI, Anthropic]
+        default: both
       preview_only:
         description: "Build and validate the pool without publishing it"
         type: boolean
@@ -39,6 +44,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROBE_PROVIDER: ${{ inputs.probe_provider }}
         run: python3 -m scripts.probe_monthly_review_keys
 
   monthly-slot:

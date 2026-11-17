@@ -230,13 +230,13 @@ class APIReviewer:
         self.provider = provider
         self.key = key
 
-    def review(self, materials, config, *, verify_model=False):
-        if len(SYSTEM.encode("utf-8")) + len(materials.encode("utf-8")) + FRAMING_TOKENS > config.max_input:
+    def review(self, materials, config, *, verify_model=False, system=SYSTEM):
+        if len(system.encode("utf-8")) + len(materials.encode("utf-8")) + FRAMING_TOKENS > config.max_input:
             raise ReviewUnavailable("input cap exceeded")
         messages = [{"role": "user", "content": materials}]
         if self.provider == "OpenAI":
             payload = {"model": MODELS[self.provider], "messages": [
-                {"role": "system", "content": SYSTEM}, *messages],
+                {"role": "system", "content": system}, *messages],
                 "max_completion_tokens": config.max_output, "n": 1,
                 "reasoning_effort": "low", "store": False, "service_tier": "default"}
             response = request_json("https://api.openai.com/v1/chat/completions",
@@ -248,7 +248,7 @@ class APIReviewer:
             input_tokens, output_tokens = usage["prompt_tokens"], usage["completion_tokens"]
             complete = choice["finish_reason"] == "stop"
         else:
-            payload = {"model": MODELS[self.provider], "system": SYSTEM, "messages": messages,
+            payload = {"model": MODELS[self.provider], "system": system, "messages": messages,
                        "max_tokens": config.max_output, "thinking": {"type": "disabled"},
                        "service_tier": "standard_only"}
             response = request_json("https://api.anthropic.com/v1/messages",
