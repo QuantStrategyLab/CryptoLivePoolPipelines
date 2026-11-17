@@ -244,7 +244,7 @@ def matches_model(model, actual):
 
 
 def select_model(provider, headers, materials, config):
-    candidates, _ = refresh_candidates(provider.lower(), review_tier(materials), config.policy)
+    candidates, pricing = refresh_candidates(provider.lower(), review_tier(materials), config.policy)
     for model in candidates:
         try:
             model_url = urllib.parse.urljoin(ENDPOINTS[provider], "/v1/models/" + urllib.parse.quote(model, safe=""))
@@ -265,11 +265,11 @@ def select_model(provider, headers, materials, config):
                         (error.get("code") == "insufficient_permissions" or
                          "api.model.read" in str(error.get("message", ""))))):
                     # Restricted keys can prove model access only with the single budgeted call.
-                    return model
+                    return model, pricing, "inference_only"
                 raise ReviewUnavailable("model metadata unavailable") from None
         if not isinstance(metadata, dict) or not matches_model(model, metadata.get("id")):
             raise ReviewUnavailable("unexpected catalog model")
-        return model
+        return model, pricing, "account_catalog"
     raise ReviewUnavailable("no approved model available for evidence tier")
 
 
@@ -283,7 +283,7 @@ class APIReviewer:
             raise ReviewUnavailable("input cap exceeded")
         headers = ({"Authorization": f"Bearer {self.key}"} if self.provider == "OpenAI" else
                    {"x-api-key": self.key, "anthropic-version": "2023-06-01"})
-        model = select_model(self.provider, headers, materials, config)
+        model, pricing, selection = select_model(self.provider, headers, materials, config)
         messages = [{"role": "user", "content": materials}]
         if self.provider == "OpenAI":
             payload = {"model": model, "messages": [
@@ -324,6 +324,8 @@ class APIReviewer:
             raise ReviewUnavailable("provider returned an incomplete review")
         if len(text) > 30000:
             raise ReviewUnavailable("review exceeds the issue comment size allowance")
+        print(json.dumps({"provider": self.provider, "model": actual, "model_verification": "provider_reported",
+                          "tier": review_tier(materials), "pricing": pricing, "selection": selection}))
         return actual, text.replace(self.key, "[redacted]")
 
 

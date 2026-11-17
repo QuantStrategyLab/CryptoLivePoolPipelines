@@ -114,7 +114,8 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
         missing = MODULE.urllib.error.HTTPError("https://example.invalid", 404, "", {},
                                                 io.BytesIO(b'{"error":{"code":"model_not_found"}}'))
         with patch.object(MODULE, "request_json", side_effect=[missing, {"id": "synthetic-next"}]) as request:
-            self.assertEqual(MODULE.select_model("OpenAI", {}, "量" * 18000, self.config), "synthetic-next")
+            self.assertEqual(MODULE.select_model("OpenAI", {}, "量" * 18000, self.config),
+                             ("synthetic-next", "official_pricing", "account_catalog"))
         self.refresh.assert_called_once_with("openai", "complex", self.config.policy)
         self.assertTrue(all("payload" not in c.kwargs for c in request.call_args_list))
 
