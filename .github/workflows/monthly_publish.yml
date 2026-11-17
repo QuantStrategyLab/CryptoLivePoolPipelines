@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   key-probe:
-    if: github.event_name == 'workflow_dispatch' && inputs.key_probe && github.run_attempt == 1
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.key_probe && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 4
     permissions:
@@ -42,8 +42,8 @@ jobs:
           persist-credentials: false
       - name: Verify both provider keys
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ inputs.probe_provider != 'Anthropic' && secrets.OPENAI_API_KEY || '' }}
+          ANTHROPIC_API_KEY: ${{ inputs.probe_provider != 'OpenAI' && secrets.ANTHROPIC_API_KEY || '' }}
           PROBE_PROVIDER: ${{ inputs.probe_provider }}
         run: python3 -m scripts.probe_monthly_review_keys
 

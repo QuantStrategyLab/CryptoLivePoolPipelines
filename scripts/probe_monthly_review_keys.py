@@ -2,7 +2,7 @@
 import os
 from urllib.error import HTTPError
 
-from scripts.run_monthly_dual_api_review import APIReviewer, Config, MODELS, ReviewUnavailable, SECRET_NAMES
+from scripts.run_monthly_dual_api_review import APIReviewer, Config, PROVIDERS, ReviewUnavailable, SECRET_NAMES
 
 MATERIAL = "## Synthetic fixture\nTwo source records were expected. Only one synthetic record was supplied."
 
@@ -10,10 +10,10 @@ MATERIAL = "## Synthetic fixture\nTwo source records were expected. Only one syn
 def main():
     config = Config({"MONTHLY_REVIEW_MAX_INPUT_TOKENS": "2048", "MONTHLY_REVIEW_MAX_OUTPUT_TOKENS": "512"})
     selected = os.environ.get("PROBE_PROVIDER") or "both"
-    if selected not in ("both", *MODELS):
+    if selected not in ("both", *PROVIDERS):
         raise SystemExit("invalid probe provider")
     ok = True
-    for provider, secret in zip(("OpenAI", "Anthropic"), SECRET_NAMES):
+    for provider, secret in zip(PROVIDERS, SECRET_NAMES):
         if selected not in ("both", provider):
             continue
         try:
@@ -21,11 +21,10 @@ def main():
             if not key:
                 raise KeyError(secret)
             reviewer = APIReviewer(provider, key)
-            if provider == "Anthropic":
-                reviewer.review(MATERIAL, config, verify_model=True,
-                                system="Reply with only the observed number of synthetic records.")
-            else:
-                reviewer.review(MATERIAL, config, verify_model=True)
+            actual, text = reviewer.review(MATERIAL, config,
+                system="Return only the number of synthetic records supplied, as a single Arabic numeral.")
+            if text.strip() != "1":
+                raise ReviewUnavailable("incorrect synthetic record count")
         except HTTPError as exc:
             print(f"{provider}: HTTP {exc.code}")
             ok = False
@@ -39,7 +38,7 @@ def main():
             print(f"{provider}: credential, transport or receipt check failed")
             ok = False
         else:
-            print(f"{provider}: completed, provider confirmed {MODELS[provider]}")
+            print(f"{provider}: completed, provider confirmed {actual}")
     return 0 if ok else 1
 
 
