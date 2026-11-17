@@ -248,12 +248,14 @@ def select_model(provider, headers, materials, config):
     # Bound the full pricing read so a stalled provider cannot consume the other review's window.
     with deadline(min(12, config.timeout)):
         candidates, pricing = refresh_candidates(provider.lower(), review_tier(materials), config.policy)
+    expires = time.monotonic() + config.timeout
     for model in candidates:
-        expires = time.monotonic() + config.timeout
+        remaining = expires - time.monotonic()
+        if remaining <= 0:
+            raise ReviewUnavailable("catalog selection deadline exceeded")
         try:
             model_url = urllib.parse.urljoin(ENDPOINTS[provider], "/v1/models/" + urllib.parse.quote(model, safe=""))
-            metadata = request_json(model_url,
-                                    headers, timeout=config.timeout)
+            metadata = request_json(model_url, headers, timeout=remaining)
         except urllib.error.HTTPError as exc:
             with exc:
                 remaining = expires - time.monotonic()

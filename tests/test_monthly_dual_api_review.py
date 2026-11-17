@@ -119,6 +119,17 @@ class MonthlyDualAPIReviewTests(unittest.TestCase):
         self.refresh.assert_called_once_with("openai", "complex", self.config.policy)
         self.assertTrue(all("payload" not in c.kwargs for c in request.call_args_list))
 
+    def test_candidate_catalogs_share_one_provider_deadline(self):
+        self.refresh.side_effect = None
+        self.refresh.return_value = (["unavailable", "next"], "official_pricing")
+        missing = MODULE.urllib.error.HTTPError("https://example.invalid", 404, "", {},
+                                                io.BytesIO(b'{"error":{"code":"model_not_found"}}'))
+        with patch.object(MODULE.time, "monotonic", side_effect=[0, 0, 59, 61]), \
+                patch.object(MODULE, "request_json", side_effect=missing) as request:
+            with self.assertRaisesRegex(MODULE.ReviewUnavailable, "selection deadline"):
+                MODULE.select_model("OpenAI", {}, "synthetic", self.config)
+        request.assert_called_once()
+
     def test_restricted_catalog_uses_one_generation_and_requires_matching_returned_model(self):
         denied = MODULE.urllib.error.HTTPError("https://example.invalid", 401, "", {},
                                                io.BytesIO(b'{"error":{"code":"insufficient_permissions"}}'))
