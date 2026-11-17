@@ -4,6 +4,8 @@ Pipeline that selects and publishes the monthly crypto live-pool used by QuantSt
 
 English | [简体中文](README.zh-CN.md)
 
+To verify rotated review keys, run **Monthly Publish** manually with `key_probe=true`. This mode sends one synthetic request to each monthly reviewer and skips all pool and publication jobs.
+
 ## Status
 
 Experimental. Use at your own risk. This project is not financial advice and

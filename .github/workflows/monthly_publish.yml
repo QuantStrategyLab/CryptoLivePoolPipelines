@@ -1,5 +1,5 @@
 name: Monthly Publish
-run-name: ${{ (github.event_name == 'schedule' || inputs.preview_only) && 'Monthly Pool Preview' || 'Monthly Publish' }}
+run-name: ${{ inputs.key_probe && 'Monthly API Key Probe' || (github.event_name == 'schedule' || inputs.preview_only) && 'Monthly Pool Preview' || 'Monthly Publish' }}
 
 "on":
   schedule:
@@ -7,6 +7,15 @@ run-name: ${{ (github.event_name == 'schedule' || inputs.preview_only) && 'Month
     - cron: "41 3 2 * *"
   workflow_dispatch:
     inputs:
+      key_probe:
+        description: 'Verify both monthly review keys with synthetic data only'
+        type: boolean
+        default: false
+      probe_provider:
+        description: 'Provider for key_probe (ignored during ordinary monthly runs)'
+        type: choice
+        options: [both, OpenAI, Anthropic]
+        default: both
       preview_only:
         description: "Build and validate the pool without publishing it"
         type: boolean
@@ -21,7 +30,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  key-probe:
+    if: github.event_name == 'workflow_dispatch' && inputs.key_probe && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Verify both provider keys
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROBE_PROVIDER: ${{ inputs.probe_provider }}
+        run: python3 -m scripts.probe_monthly_review_keys
+
   monthly-slot:
+    if: ${{ !inputs.key_probe }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
