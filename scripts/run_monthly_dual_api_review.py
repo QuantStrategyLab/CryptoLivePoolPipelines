@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import signal
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -248,14 +249,19 @@ def select_model(provider, headers, materials, config):
     with deadline(min(12, config.timeout)):
         candidates, pricing = refresh_candidates(provider.lower(), review_tier(materials), config.policy)
     for model in candidates:
+        expires = time.monotonic() + config.timeout
         try:
             model_url = urllib.parse.urljoin(ENDPOINTS[provider], "/v1/models/" + urllib.parse.quote(model, safe=""))
             metadata = request_json(model_url,
                                     headers, timeout=config.timeout)
         except urllib.error.HTTPError as exc:
             with exc:
+                remaining = expires - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError
                 try:
-                    error = json.loads(exc.read(16384)).get("error", {})
+                    with deadline(remaining):
+                        error = json.loads(exc.read(16384)).get("error", {})
                 except (ValueError, AttributeError):
                     error = {}
                 if not isinstance(error, dict):
