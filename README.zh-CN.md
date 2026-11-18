@@ -4,7 +4,7 @@
 
 [English](README.md) | 简体中文
 
-更换月审密钥后，可手动运行 **Monthly Publish** 并勾选 `key_probe`。每家服务商各收到一次合成请求，资金池构建与正式发布步骤均跳过。
+更换月审密钥后，可手动运行 **Monthly Publish** 并设置 `key_probe=true`。此模式向每位月审服务商各发送一次合成请求，并跳过所有资金池与发布作业。
 
 ## 状态
 
