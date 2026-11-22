@@ -25,6 +25,9 @@ run-name: ${{ inputs.key_probe && 'Monthly API Key Probe' || (github.event_name 
         type: string
         required: false
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: false
