@@ -199,8 +199,8 @@ jobs:
       DOWNLOAD_TOP_LIQUID: ${{ vars.DOWNLOAD_TOP_LIQUID || '90' }}
       FIRESTORE_COLLECTION: ${{ vars.FIRESTORE_COLLECTION || 'strategy' }}
       FIRESTORE_DOCUMENT: ${{ vars.FIRESTORE_DOCUMENT || 'CRYPTO_LIVE_POOL_ROTATION_LIVE_POOL' }}
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-      GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:

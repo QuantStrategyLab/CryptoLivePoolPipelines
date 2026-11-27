@@ -38,20 +38,20 @@ EXPECTED_REMOTE_ACTIONS = {
 
 
 class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
-    def test_publish_targets_use_vars_only(self) -> None:
+    def test_publish_targets_use_secrets_for_gcp_project_and_bucket(self) -> None:
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("actions: write", workflow)
         self.assertIn(PINNED_ACTIONS[0], workflow)
         self.assertIn("google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3", workflow)
         self.assertIn(PINNED_ACTIONS[2], workflow)
-        self.assertIn("GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}", workflow)
-        self.assertIn("GCS_BUCKET: ${{ vars.GCS_BUCKET }}", workflow)
+        self.assertIn("GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}", workflow)
+        self.assertIn("GCS_BUCKET: ${{ secrets.GCS_BUCKET }}", workflow)
         self.assertIn("workload_identity_provider:", workflow)
         self.assertIn("service_account:", workflow)
         self.assertIn("issues: write", workflow)
-        self.assertNotIn("secrets.GCP_PROJECT_ID", workflow)
-        self.assertNotIn("secrets.GCS_BUCKET", workflow)
+        self.assertNotIn("vars.GCP_PROJECT_ID", workflow)
+        self.assertNotIn("vars.GCS_BUCKET", workflow)
         self.assertNotIn("credentials_json:", workflow)
         self.assertNotIn("GCP_SERVICE_ACCOUNT_KEY", workflow)
 
