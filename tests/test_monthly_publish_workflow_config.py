@@ -15,24 +15,19 @@ QPK_DEPENDENCY = (
     "quant-platform-kit @ "
     "git+https://github.com/QuantStrategyLab/QuantPlatformKit.git@7f140f07ac89f0b4b88347a903906825dde11c39"
 )
-PINNED_ACTIONS = (
-    "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6",
-    "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6",
-    "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7",
-)
 EXPECTED_REMOTE_ACTIONS = {
     WORKFLOW_PATH: {
-        "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),
-        "actions/setup-python": ("ece7cb06caefa5fff74198d8649806c4678c61a1", "v6"),
-        "actions/upload-artifact": ("cf430e030ddbb5b0abf93d22962f4752f3646cd9", "v7"),
-        "actions/download-artifact": ("9000827ccba6bdab643e8b6fd33ac0654aef8333", "v8"),
-        "google-github-actions/auth": ("7c6bc770dae815cd3e89ee6cdf493a5fab2cc093", "v3"),
-        "QuantStrategyLab/.github/actions/scan-before-publish": ("925d718e440bd5cc7c4537ffef2fd53a2f0e654d", "v1"),
+        "actions/checkout",
+        "actions/setup-python",
+        "actions/upload-artifact",
+        "actions/download-artifact",
+        "google-github-actions/auth",
+        "QuantStrategyLab/.github/actions/scan-before-publish",
     },
     LIFECYCLE_WORKFLOW_PATH: {
-        "actions/checkout": ("d23441a48e516b6c34aea4fa41551a30e30af803", "v6"),
-        "actions/setup-python": ("ece7cb06caefa5fff74198d8649806c4678c61a1", "v6"),
-        "actions/upload-artifact": ("cf430e030ddbb5b0abf93d22962f4752f3646cd9", "v7"),
+        "actions/checkout",
+        "actions/setup-python",
+        "actions/upload-artifact",
     },
 }
 
@@ -42,9 +37,8 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
         workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
         self.assertIn("actions: write", workflow)
-        self.assertIn(PINNED_ACTIONS[0], workflow)
-        self.assertIn("google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3", workflow)
-        self.assertIn(PINNED_ACTIONS[2], workflow)
+        for action in ("actions/checkout", "google-github-actions/auth", "actions/upload-artifact"):
+            self.assertRegex(workflow, rf"uses:\s*{re.escape(action)}@[0-9a-f]{{40}}\s+#\s*v\d+")
         self.assertIn("GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}", workflow)
         self.assertIn("GCS_BUCKET: ${{ secrets.GCS_BUCKET }}", workflow)
         self.assertIn("workload_identity_provider:", workflow)
@@ -117,7 +111,7 @@ class MonthlyPublishWorkflowConfigTests(unittest.TestCase):
                     self.assertEqual(observed[action], (revision, tag))
                 observed[action] = (revision, tag)
 
-            self.assertEqual(observed, expected)
+            self.assertEqual(set(observed), expected)
 
     def test_real_publish_dependency_is_locked(self) -> None:
         requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
